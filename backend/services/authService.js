@@ -1,62 +1,51 @@
-import bcrypt from "bcryptjs";
-import jwt from "jsonwebtoken";
 import User from "../models/User.js";
+import generateToken from "../utils/generateToken.js";
+import { normalizeEmail } from "../utils/validators.js";
 
-const generateToken = (id, role) => {
-  return jwt.sign({ id, role }, process.env.JWT_SECRET, {
-    expiresIn: "30d",
-  });
-};
+const sanitizeUser = (user) => ({
+  _id: user._id,
+  name: user.name,
+  email: user.email,
+  role: user.role,
+  phone: user.phone,
+  addresses: user.addresses,
+  token: generateToken(user._id, user.role),
+});
 
-// REGISTER
-export const register = async ({ name, email, password, role }) => {
-  const userExists = await User.findOne({ email });
+export const register = async ({ name, email, password, role, phone }) => {
+  const normalizedEmail = normalizeEmail(email);
+  const userExists = await User.findOne({ email: normalizedEmail });
   if (userExists) throw new Error("User already exists");
-
-  const hashed = await bcrypt.hash(password, 10);
 
   const user = await User.create({
     name,
-    email,
-    password: hashed,
+    email: normalizedEmail,
+    password,
     role: role || "user",
+    phone,
   });
 
-  return {
-    _id: user._id,
-    name: user.name,
-    email: user.email,
-    role: user.role,
-    token: generateToken(user._id, user.role),
-  };
+  return sanitizeUser(user);
 };
 
-// LOGIN
 export const login = async ({ email, password }) => {
-  const user = await User.findOne({ email });
+  const user = await User.findOne({ email: normalizeEmail(email) }).select("+password");
   if (!user) throw new Error("Invalid credentials");
 
   const isMatch = await user.matchPassword(password);
   if (!isMatch) throw new Error("Invalid credentials");
 
-  return {
-    _id: user._id,
-    name: user.name,
-    email: user.email,
-    role: user.role,
-    token: generateToken(user._id, user.role),
-  };
+  return sanitizeUser(user);
 };
 
-// UPDATE PASSWORD
 export const changePassword = async (userId, currentPassword, newPassword) => {
-  const user = await User.findById(userId);
+  const user = await User.findById(userId).select("+password");
   if (!user) throw new Error("User not found");
 
   const isMatch = await user.matchPassword(currentPassword);
   if (!isMatch) throw new Error("Wrong current password");
 
-  user.password = await bcrypt.hash(newPassword, 10);
+  user.password = newPassword;
   await user.save();
 
   return { message: "Password updated successfully" };
