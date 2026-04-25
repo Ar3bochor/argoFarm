@@ -1,52 +1,58 @@
-// src/context/AuthContext.jsx
-import { createContext, useEffect, useState } from "react";
+import { createContext, useCallback, useEffect, useMemo, useState } from "react";
 import * as authService from "../services/authService";
 
-export const AuthContext = createContext();
+export const AuthContext = createContext(null);
 
 export const AuthProvider = ({ children }) => {
   const [user, setUser] = useState(null);
   const [loading, setLoading] = useState(true);
 
-  const loadUser = async () => {
+  const logout = useCallback(() => {
+    localStorage.removeItem("token");
+    setUser(null);
+  }, []);
+
+  const loadUser = useCallback(async () => {
+    const token = localStorage.getItem("token");
+    if (!token) {
+      setLoading(false);
+      return null;
+    }
+
     try {
       const { data } = await authService.getMe();
       setUser(data);
-    } catch (err) {
+      return data;
+    } catch {
       logout();
+      return null;
     } finally {
       setLoading(false);
     }
-  };
+  }, [logout]);
 
   useEffect(() => {
-    if (localStorage.getItem("token")) {
-      loadUser();
-    } else {
-      setLoading(false);
-    }
-  }, []);
+    loadUser();
+  }, [loadUser]);
 
   const login = async (formData) => {
     const { data } = await authService.loginUser(formData);
     localStorage.setItem("token", data.token);
-    await loadUser();
+    setUser(data);
+    return data;
   };
 
   const register = async (formData) => {
     const { data } = await authService.registerUser(formData);
     localStorage.setItem("token", data.token);
-    await loadUser();
+    setUser(data);
+    return data;
   };
 
-  const logout = () => {
-    localStorage.removeItem("token");
-    setUser(null);
-  };
-
-  return (
-    <AuthContext.Provider value={{ user, login, register, logout, loading }}>
-      {children}
-    </AuthContext.Provider>
+  const value = useMemo(
+    () => ({ user, setUser, loading, login, register, logout, refreshUser: loadUser, isAdmin: user?.role === "admin" }),
+    [user, loading, loadUser, logout]
   );
+
+  return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
 };
