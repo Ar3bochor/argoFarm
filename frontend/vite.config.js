@@ -1,11 +1,15 @@
+// vite.config.js
 import { defineConfig } from 'vite'
-import react, { reactCompilerPreset } from '@vitejs/plugin-react'
-import babel from '@rolldown/plugin-babel'
+import WindiCSS from 'vite-plugin-windicss'
+import autoprefixer from 'autoprefixer'
 
-// https://vite.dev/config/
+// https://vitejs.dev/config/
+
 export default defineConfig({
-  plugins: [
-    react(),
-    babel({ presets: [reactCompilerPreset()] })
-  ],
+plugins: [WindiCSS()],
+css: {
+postcss: {
+plugins: [autoprefixer()],
+},
+},
 })
