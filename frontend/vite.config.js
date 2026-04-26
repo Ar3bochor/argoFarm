@@ -1,15 +1,6 @@
-// vite.config.js
-import { defineConfig } from 'vite'
-import WindiCSS from 'vite-plugin-windicss'
-import autoprefixer from 'autoprefixer'
-
-// https://vitejs.dev/config/
+import { defineConfig } from "vite";
+import react from "@vitejs/plugin-react";
 
 export default defineConfig({
-plugins: [WindiCSS()],
-css: {
-postcss: {
-plugins: [autoprefixer()],
-},
-},
-})
+  plugins: [react()],
+});

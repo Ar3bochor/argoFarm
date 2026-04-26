@@ -3,6 +3,301 @@ import { Link, useLocation, useNavigate } from "react-router-dom";
 import useAuth from "../../hooks/useAuth";
 import { getErrorMessage } from "../../utils/helpers";
 
+const css = `
+  @import url('https://fonts.googleapis.com/css2?family=Syne:wght@400;500;600;700;800&family=Instrument+Sans:wght@400;500;600&display=swap');
+
+  .au * { box-sizing: border-box; }
+  .au {
+    font-family: 'Instrument Sans', sans-serif;
+    display: flex;
+    min-height: 100vh;
+    background: #f9f8f6;
+    color: #0d0d0d;
+  }
+
+  /* ── Left panel ── */
+  .au-panel {
+    display: none;
+    width: 50%;
+    background: #0d0d0d;
+    padding: 64px 56px;
+    flex-direction: column;
+    justify-content: space-between;
+    position: relative;
+    overflow: hidden;
+  }
+  @media (min-width: 1024px) { .au-panel { display: flex; } }
+
+  .au-panel::before {
+    content: '';
+    position: absolute;
+    inset: 0;
+    background-image:
+      linear-gradient(rgba(255,255,255,0.03) 1px, transparent 1px),
+      linear-gradient(90deg, rgba(255,255,255,0.03) 1px, transparent 1px);
+    background-size: 40px 40px;
+    pointer-events: none;
+  }
+
+  /* Accent circle */
+  .au-panel::after {
+    content: '';
+    position: absolute;
+    width: 480px; height: 480px;
+    border-radius: 50%;
+    border: 1px solid rgba(163,230,53,0.12);
+    bottom: -160px; right: -120px;
+    pointer-events: none;
+  }
+
+  .au-brand {
+    font-family: 'Syne', sans-serif;
+    font-size: 12px;
+    font-weight: 700;
+    letter-spacing: 0.22em;
+    text-transform: uppercase;
+    color: #a3e635;
+    position: relative;
+    z-index: 1;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+  }
+  .au-brand::before {
+    content: '';
+    width: 20px; height: 1px;
+    background: #a3e635;
+  }
+
+  .au-panel-copy {
+    position: relative;
+    z-index: 1;
+  }
+
+  .au-panel-title {
+    font-family: 'Syne', sans-serif;
+    font-size: clamp(36px, 3.5vw, 52px);
+    font-weight: 800;
+    color: #fff;
+    line-height: 1.05;
+    letter-spacing: -0.03em;
+    margin: 0 0 20px;
+  }
+  .au-panel-title span { color: #a3e635; }
+
+  .au-panel-desc {
+    font-size: 15px;
+    line-height: 1.7;
+    color: rgba(255,255,255,0.4);
+    max-width: 380px;
+  }
+
+  .au-tags {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+    position: relative;
+    z-index: 1;
+  }
+  .au-tag {
+    font-size: 12px;
+    font-weight: 600;
+    letter-spacing: 0.04em;
+    padding: 8px 16px;
+    border: 1px solid rgba(255,255,255,0.1);
+    color: rgba(255,255,255,0.6);
+    backdrop-filter: blur(4px);
+  }
+
+  /* ── Right / form side ── */
+  .au-form-side {
+    flex: 1;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 48px 24px;
+  }
+
+  .au-form-box {
+    width: 100%;
+    max-width: 420px;
+  }
+
+  .au-eyebrow {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    font-size: 11px;
+    font-weight: 600;
+    letter-spacing: 0.14em;
+    text-transform: uppercase;
+    color: #a3e635;
+    margin-bottom: 16px;
+  }
+  .au-eyebrow::before {
+    content: '';
+    width: 16px; height: 1px;
+    background: #a3e635;
+  }
+
+  .au-form-title {
+    font-family: 'Syne', sans-serif;
+    font-size: clamp(30px, 4vw, 42px);
+    font-weight: 800;
+    color: #0d0d0d;
+    line-height: 1.05;
+    letter-spacing: -0.03em;
+    margin: 0 0 40px;
+  }
+
+  /* ── Fields ── */
+  .au-field-group {
+    margin-bottom: 4px;
+  }
+
+  .au-label {
+    display: block;
+    font-size: 11px;
+    font-weight: 600;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    color: #888;
+    margin-bottom: 8px;
+  }
+
+  .au-input {
+    display: block;
+    width: 100%;
+    height: 52px;
+    border: 1px solid #e8e6e1;
+    background: #fff;
+    font-family: 'Instrument Sans', sans-serif;
+    font-size: 15px;
+    font-weight: 400;
+    color: #0d0d0d;
+    padding: 0 16px;
+    outline: none;
+    border-radius: 0;
+    transition: border-color 0.15s;
+    -webkit-appearance: none;
+    appearance: none;
+  }
+  .au-input::placeholder { color: #bbb; }
+  .au-input:focus { border-color: #0d0d0d; }
+
+  .au-textarea {
+    height: auto;
+    min-height: 96px;
+    padding: 14px 16px;
+    resize: vertical;
+    line-height: 1.6;
+  }
+
+  .au-select {
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 12 12'%3E%3Cpath d='M2 4l4 4 4-4' stroke='%23888' stroke-width='1.5' fill='none' stroke-linecap='round'/%3E%3C/svg%3E");
+    background-repeat: no-repeat;
+    background-position: right 14px center;
+    padding-right: 36px;
+    cursor: pointer;
+  }
+
+  /* ── Error ── */
+  .au-error {
+    font-size: 13px;
+    font-weight: 500;
+    color: #c0392b;
+    padding: 12px 16px;
+    background: #fdf2f2;
+    border-left: 2px solid #c0392b;
+    margin-bottom: 4px;
+  }
+
+  /* ── Submit button ── */
+  .au-btn {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 10px;
+    width: 100%;
+    height: 52px;
+    background: #0d0d0d;
+    color: #fff;
+    font-family: 'Instrument Sans', sans-serif;
+    font-size: 14px;
+    font-weight: 600;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    border: none;
+    cursor: pointer;
+    border-radius: 0;
+    transition: background 0.15s, transform 0.1s;
+    margin-top: 8px;
+  }
+  .au-btn:hover:not(:disabled) { background: #222; }
+  .au-btn:active:not(:disabled) { transform: scale(0.99); }
+  .au-btn:disabled { opacity: 0.4; cursor: not-allowed; }
+
+  /* ── Divider rule ── */
+  .au-rule {
+    border: none;
+    border-top: 1px solid #e8e6e1;
+    margin: 32px 0;
+  }
+
+  .au-footer-text {
+    font-size: 13px;
+    color: #888;
+    text-align: center;
+  }
+  .au-link {
+    font-weight: 600;
+    color: #0d0d0d;
+    text-decoration: none;
+    border-bottom: 1px solid #0d0d0d;
+    padding-bottom: 1px;
+    transition: color 0.15s, border-color 0.15s;
+  }
+  .au-link:hover { color: #555; border-color: #555; }
+
+  /* ── Grid layout for multi-column forms ── */
+  .au-grid-2 {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 16px 12px;
+  }
+  .au-col-2 { grid-column: span 2; }
+  @media (max-width: 480px) {
+    .au-grid-2 { grid-template-columns: 1fr; }
+    .au-col-2 { grid-column: span 1; }
+  }
+
+  /* ── Checkbox row ── */
+  .au-check-row {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 14px 16px;
+    border: 1px solid #e8e6e1;
+    background: #fff;
+    cursor: pointer;
+  }
+  .au-check-row input[type="checkbox"] {
+    width: 15px; height: 15px;
+    accent-color: #0d0d0d;
+    cursor: pointer;
+    flex-shrink: 0;
+  }
+  .au-check-label {
+    font-size: 13px;
+    font-weight: 500;
+    color: #555;
+    line-height: 1.4;
+  }
+
+  /* ── Form spacing util ── */
+  .au-stack { display: flex; flex-direction: column; gap: 16px; }
+`;
+
 export default function Login() {
   const { login } = useAuth();
   const navigate = useNavigate();
@@ -27,28 +322,72 @@ export default function Login() {
   };
 
   return (
-    <main className="auth-shell">
-      <section className="auth-panel hidden lg:flex">
-        <div>
-          <p className="text-sm font-black uppercase tracking-[0.3em] text-leaf-100">KrishiMart</p>
-          <h1 className="mt-6 text-6xl font-black leading-tight">Welcome back to fresh shopping.</h1>
-          <p className="mt-6 max-w-md text-lg leading-8 text-leaf-100">Login to access cart, delivery addresses, checkout, order tracking, reorders, and product reviews.</p>
+    <main className="au">
+      <style>{css}</style>
+
+      {/* ── Left panel ── */}
+      <section className="au-panel">
+        <div className="au-brand">KrishiMart</div>
+
+        <div className="au-panel-copy">
+          <h1 className="au-panel-title">
+            Welcome<br />back to<br /><span>fresh</span><br />shopping.
+          </h1>
+          <p className="au-panel-desc">
+            Access your cart, delivery addresses, checkout, order tracking, reorders, and product reviews.
+          </p>
         </div>
-        <div className="grid grid-cols-3 gap-4">
-          {['Fast search','Secure JWT','Mobile checkout'].map((item) => <div key={item} className="rounded-3xl bg-white/10 p-4 text-sm font-bold backdrop-blur">{item}</div>)}
+
+        <div className="au-tags">
+          {["Fast search", "Secure JWT", "Mobile checkout"].map(t => (
+            <div key={t} className="au-tag">{t}</div>
+          ))}
         </div>
       </section>
-      <section className="flex min-h-[calc(100vh-76px)] items-center justify-center px-4 py-12 lg:w-1/2">
-        <div className="w-full max-w-md rounded-[2rem] bg-white p-8 shadow-soft ring-1 ring-slate-100">
-          <p className="eyebrow">Login</p>
-          <h2 className="mt-2 text-3xl font-black text-slate-950">Access your account</h2>
-          <form onSubmit={submit} className="mt-8 space-y-4">
-            <label className="field-label">Email<input type="email" required value={form.email} onChange={(e) => setForm((p) => ({ ...p, email: e.target.value }))} className="field" placeholder="you@example.com" /></label>
-            <label className="field-label">Password<input type="password" required value={form.password} onChange={(e) => setForm((p) => ({ ...p, password: e.target.value }))} className="field" placeholder="••••••••" /></label>
-            {error && <p className="rounded-2xl bg-rose-50 p-3 text-sm font-bold text-rose-700">{error}</p>}
-            <button disabled={loading} className="btn-primary w-full justify-center py-4 disabled:opacity-60">{loading ? "Logging in..." : "Login"}</button>
+
+      {/* ── Right / form ── */}
+      <section className="au-form-side">
+        <div className="au-form-box">
+          <div className="au-eyebrow">Login</div>
+          <h2 className="au-form-title">Access your<br />account</h2>
+
+          <form onSubmit={submit} className="au-stack">
+            <div className="au-field-group">
+              <label className="au-label">Email</label>
+              <input
+                type="email"
+                required
+                value={form.email}
+                onChange={e => setForm(p => ({ ...p, email: e.target.value }))}
+                className="au-input"
+                placeholder="you@example.com"
+              />
+            </div>
+
+            <div className="au-field-group">
+              <label className="au-label">Password</label>
+              <input
+                type="password"
+                required
+                value={form.password}
+                onChange={e => setForm(p => ({ ...p, password: e.target.value }))}
+                className="au-input"
+                placeholder="••••••••"
+              />
+            </div>
+
+            {error && <div className="au-error">{error}</div>}
+
+            <button type="submit" disabled={loading} className="au-btn">
+              {loading ? "Logging in…" : "Login →"}
+            </button>
           </form>
-          <p className="mt-6 text-center text-sm text-slate-500">No account? <Link to="/register" className="font-black text-leaf-700">Create one</Link></p>
+
+          <hr className="au-rule" />
+          <p className="au-footer-text">
+            No account?{" "}
+            <Link to="/register" className="au-link">Create one</Link>
+          </p>
         </div>
       </section>
     </main>

@@ -7,13 +7,17 @@ import {
   validateCoupon,
 } from "../controllers/couponController.js";
 import { protect, authorizeRoles } from "../middleware/authMiddleware.js";
+import { sanitizeBody } from "../middleware/validateMiddleware.js";
 
 const router = Router();
 
-router.post("/validate", protect, validateCoupon);
-router.get("/", protect, authorizeRoles("admin"), getCoupons);
-router.post("/", protect, authorizeRoles("admin"), createCoupon);
-router.put("/:id", protect, authorizeRoles("admin"), updateCoupon);
+// Any logged-in user can validate a coupon
+router.post("/validate", protect, sanitizeBody, validateCoupon);
+
+// Admin only
+router.get("/",      protect, authorizeRoles("admin"), getCoupons);
+router.post("/",     protect, authorizeRoles("admin"), sanitizeBody, createCoupon);
+router.put("/:id",   protect, authorizeRoles("admin"), sanitizeBody, updateCoupon);
 router.delete("/:id", protect, authorizeRoles("admin"), deleteCoupon);
 
 export default router;

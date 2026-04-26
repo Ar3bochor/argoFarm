@@ -1,30 +1,34 @@
 import { Router } from "express";
 import {
   addAddress,
+  deleteAccount,
   deleteAddress,
-  deleteUser,
   getAddresses,
-  getMyOrders,
   getUserProfile,
   updateAddress,
   updateUserProfile,
 } from "../controllers/userController.js";
-import { protect, authorizeRoles } from "../middleware/authMiddleware.js";
+import { protect } from "../middleware/authMiddleware.js";
+import { sanitizeBody } from "../middleware/validateMiddleware.js";
 
 const router = Router();
 
-router.route("/profile").get(protect, getUserProfile).put(protect, updateUserProfile);
-router.route("/addresses").get(protect, getAddresses).post(protect, addAddress);
-router.route("/addresses/:id").put(protect, updateAddress).delete(protect, deleteAddress);
-router.get("/orders", protect, getMyOrders);
-router.delete("/account", protect, deleteUser);
+router.use(protect);
 
-router.get("/admin-only", protect, authorizeRoles("admin"), (req, res) => {
-  res.json({ message: "Admin access granted" });
-});
+router.route("/profile")
+  .get(getUserProfile)
+  .put(sanitizeBody, updateUserProfile);
 
-router.get("/farmer-only", protect, authorizeRoles("farmer"), (req, res) => {
-  res.json({ message: "Farmer access granted" });
-});
+router.route("/addresses")
+  .get(getAddresses)
+  .post(sanitizeBody, addAddress);
+
+router.route("/addresses/:id")
+  .put(sanitizeBody, updateAddress)
+  .delete(deleteAddress);
+
+// NOTE: /orders removed — use GET /api/orders/my instead (includes pagination)
+
+router.delete("/account", deleteAccount);
 
 export default router;

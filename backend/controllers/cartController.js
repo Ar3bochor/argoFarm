@@ -130,3 +130,22 @@ export const applyCoupon = asyncHandler(async (req, res) => {
   const populated = await populateCart(Cart.findById(cart._id));
   res.json(decorateCart(populated));
 });
+
+/**
+ * @desc    Remove applied coupon from cart
+ * @route   DELETE /api/cart/coupon
+ * @access  Private
+ */
+export const removeCoupon = asyncHandler(async (req, res) => {
+  const cart = await getOrCreateCart(req.user._id);
+
+  if (!cart.coupon?.code) {
+    res.status(400);
+    throw new Error("No coupon is currently applied to your cart");
+  }
+
+  cart.coupon = undefined;
+  await cart.save();
+  const populated = await populateCart(Cart.findById(cart._id));
+  res.json(decorateCart(populated));
+});
