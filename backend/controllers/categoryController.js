@@ -5,7 +5,7 @@ import { requiredFields } from "../utils/validators.js";
 export const getCategories = asyncHandler(async (req, res) => {
   const filters = req.query.includeInactive === "true" ? {} : { isActive: true };
   const categories = await Category.find(filters).sort({ name: 1 }).lean();
-  res.json(categories);
+  res.json({ success: true, data: categories });
 });
 
 export const getCategoryById = asyncHandler(async (req, res) => {
@@ -14,13 +14,13 @@ export const getCategoryById = asyncHandler(async (req, res) => {
     res.status(404);
     throw new Error("Category not found");
   }
-  res.json(category);
+  res.json({ success: true, data: category });
 });
 
 export const createCategory = asyncHandler(async (req, res) => {
   requiredFields(req.body, ["name"]);
   const category = await Category.create(req.body);
-  res.status(201).json(category);
+  res.status(201).json({ success: true, data: category });
 });
 
 export const updateCategory = asyncHandler(async (req, res) => {
@@ -32,7 +32,7 @@ export const updateCategory = asyncHandler(async (req, res) => {
     res.status(404);
     throw new Error("Category not found");
   }
-  res.json(category);
+  res.json({ success: true, data: category });
 });
 
 export const deleteCategory = asyncHandler(async (req, res) => {
@@ -42,5 +42,5 @@ export const deleteCategory = asyncHandler(async (req, res) => {
     throw new Error("Category not found");
   }
   await category.deleteOne();
-  res.json({ message: "Category deleted successfully" });
+  res.json({ success: true, message: "Category deleted successfully" });
 });

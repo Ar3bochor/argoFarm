@@ -1,10 +1,9 @@
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useSearchParams } from "react-router-dom";
-import EmptyState from "../components/EmptyState";
 import ProductCard from "../components/ProductCard";
-import { SkeletonCard } from "../components/Loader";
 import * as productService from "../services/productService";
 import * as categoryService from "../services/categoryService";
+import { getErrorMessage } from "../utils/helpers";
 
 const css = `
   @import url('https://fonts.googleapis.com/css2?family=Syne:wght@400;500;600;700;800&family=Instrument+Sans:wght@400;500;600&display=swap');
@@ -289,6 +288,42 @@ const css = `
     transition: background 0.15s;
   }
   .pm-empty-btn:hover { background: #222; }
+  .pm-error {
+    background: #fff5f5;
+    border: 1px solid #fecaca;
+    color: #9f1239;
+    padding: 16px 18px;
+    margin-bottom: 18px;
+    font-size: 13px;
+    font-weight: 700;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 16px;
+  }
+  .pm-error button {
+    border: 1px solid #9f1239;
+    background: transparent;
+    color: #9f1239;
+    padding: 8px 14px;
+    font-size: 12px;
+    font-weight: 800;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    cursor: pointer;
+  }
+  .pm-error button:hover { background: #9f1239; color: #fff; }
+  .pm-sr-only {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    padding: 0;
+    margin: -1px;
+    overflow: hidden;
+    clip: rect(0, 0, 0, 0);
+    white-space: nowrap;
+    border: 0;
+  }
 
   /* ── Pagination ── */
   .pm-pagination {
@@ -348,6 +383,7 @@ const css = `
   }
 `;
 
+
 const defaultFilters = {
   q: "",
   category: "",
@@ -358,60 +394,134 @@ const defaultFilters = {
   inStock: false
 };
 
+const parseFilters = (searchParams) => ({
+  q: searchParams.get("q") || "",
+  category: searchParams.get("category") || "",
+  sort: searchParams.get("sort") || defaultFilters.sort,
+  minPrice: searchParams.get("minPrice") || "",
+  maxPrice: searchParams.get("maxPrice") || "",
+  minRating: searchParams.get("minRating") || "",
+  inStock: searchParams.get("inStock") === "true",
+});
+
+const parsePage = (searchParams) => Math.max(1, Number(searchParams.get("page")) || 1);
+
+const filtersEqual = (a, b) => Object.keys(defaultFilters).every((key) => a[key] === b[key]);
+
+const buildSearchParams = (filters, page) => {
+  const params = new URLSearchParams();
+  if (filters.q) params.set("q", filters.q);
+  if (filters.category) params.set("category", filters.category);
+  if (filters.sort && filters.sort !== defaultFilters.sort) params.set("sort", filters.sort);
+  if (filters.minPrice) params.set("minPrice", filters.minPrice);
+  if (filters.maxPrice) params.set("maxPrice", filters.maxPrice);
+  if (filters.minRating) params.set("minRating", filters.minRating);
+  if (filters.inStock) params.set("inStock", "true");
+  if (page > 1) params.set("page", String(page));
+  return params;
+};
+
+const unwrapProducts = (body) => {
+  if (Array.isArray(body)) return body;
+  if (Array.isArray(body?.products)) return body.products;
+  if (Array.isArray(body?.data?.products)) return body.data.products;
+  if (Array.isArray(body?.data)) return body.data;
+  return [];
+};
+
 export default function Products() {
   const [searchParams, setSearchParams] = useSearchParams();
-  const [filters, setFilters] = useState({
-    ...defaultFilters,
-    category: searchParams.get("category") || "",
-    q: searchParams.get("q") || ""
-  });
+  const searchParamsString = searchParams.toString();
+  const [filters, setFilters] = useState(() => parseFilters(searchParams));
   const [products, setProducts] = useState([]);
-  const [meta, setMeta] = useState({ page: 1, pages: 1, total: 0 });
+  const [meta, setMeta] = useState(() => ({ page: parsePage(searchParams), pages: 1, total: 0 }));
   const [categories, setCategories] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState("");
+  const requestIdRef = useRef(0);
+  const abortRef = useRef(null);
 
   useEffect(() => {
+    let active = true;
     categoryService.getCategories()
-      .then(({ data }) => setCategories(data || []))
-      .catch(() => setCategories([]));
+      .then(({ data }) => {
+        if (active) {
+          setCategories(Array.isArray(data?.data) ? data.data : []);  // Ensure it's always an array
+        }
+      })
+      .catch(() => {
+        if (active) setCategories([]);  // Fallback to an empty array on error
+      });
+    return () => { active = false; };
   }, []);
+
+  useEffect(() => {
+    const nextParams = new URLSearchParams(searchParamsString);
+    const nextFilters = parseFilters(nextParams);
+    const nextPage = parsePage(nextParams);
+
+    setFilters((prev) => (filtersEqual(prev, nextFilters) ? prev : nextFilters));
+    setMeta((prev) => (prev.page === nextPage ? prev : { ...prev, page: nextPage }));
+  }, [searchParamsString]);
+
+  useEffect(() => {
+    const next = buildSearchParams(filters, meta.page);
+    if (next.toString() !== searchParamsString) {
+      setSearchParams(next, { replace: true });
+    }
+  }, [filters, meta.page, searchParamsString, setSearchParams]);
 
   const query = useMemo(() => {
     const params = { limit: 12, page: meta.page || 1, sort: filters.sort };
     Object.entries(filters).forEach(([key, value]) => {
-      if (value !== "" && value !== false && value !== null) params[key] = value;
+      if (value !== "" && value !== false && value !== null && value !== undefined) params[key] = value;
     });
     if (filters.q) params.keyword = filters.q;
     return params;
   }, [filters, meta.page]);
 
-  useEffect(() => {
-    const timer = setTimeout(async () => {
-      setLoading(true);
-      try {
-        const { data } = await productService.getProducts(query);
-        setProducts(data.products || data || []);
-        setMeta(prev => ({
-          ...prev,
-          page: data.page || query.page || 1,
-          pages: data.pages || 1,
-          total: data.total || (data.products || data || []).length
-        }));
-      } catch {
+  const loadProducts = useCallback(() => {
+    if (abortRef.current) abortRef.current.abort();
+    const controller = new AbortController();
+    abortRef.current = controller;
+    const requestId = ++requestIdRef.current;
+
+    setLoading(true);
+    setError("");
+
+    productService.getProducts(query, { signal: controller.signal })
+      .then(({ data }) => {
+        if (requestId !== requestIdRef.current) return;
+        const nextProducts = unwrapProducts(data);
+        const nextPages = Math.max(Number(data?.pages ?? data?.data?.pages) || 1, 1);
+        const requestedPage = Math.max(Number(query.page) || 1, 1);
+        const safePage = Math.min(requestedPage, nextPages);
+
+        setProducts(nextProducts);
+        setMeta({
+          page: safePage,
+          pages: nextPages,
+          total: Number(data?.total ?? data?.data?.total ?? nextProducts.length) || 0,
+        });
+      })
+      .catch((err) => {
+        if (err?.code === "ERR_CANCELED" || requestId !== requestIdRef.current) return;
         setProducts([]);
-      } finally {
-        setLoading(false);
-      }
-    }, 250);
-    return () => clearTimeout(timer);
+        setMeta({ page: 1, pages: 1, total: 0 });
+        setError(getErrorMessage(err, "Unable to load products. Please check that the backend server is running."));
+      })
+      .finally(() => {
+        if (requestId === requestIdRef.current) setLoading(false);
+      });
   }, [query]);
 
   useEffect(() => {
-    const params = new URLSearchParams();
-    if (filters.q) params.set("q", filters.q);
-    if (filters.category) params.set("category", filters.category);
-    setSearchParams(params, { replace: true });
-  }, [filters.q, filters.category, setSearchParams]);
+    const timer = setTimeout(loadProducts, 250);
+    return () => {
+      clearTimeout(timer);
+      if (abortRef.current) abortRef.current.abort();
+    };
+  }, [loadProducts]);
 
   const change = (e) => {
     const { name, value, type, checked } = e.target;
@@ -422,6 +532,7 @@ export default function Products() {
   const reset = () => {
     setFilters(defaultFilters);
     setMeta(prev => ({ ...prev, page: 1 }));
+    setError("");
   };
 
   const activeFilterCount = Object.entries(filters).filter(([k, v]) =>
@@ -432,7 +543,6 @@ export default function Products() {
     <main className="pm">
       <style>{css}</style>
 
-      {/* ── Page Header ─────────────────────────────── */}
       <header className="pm-header">
         <div className="pm-header-inner">
           <div className="pm-eyebrow">
@@ -449,30 +559,28 @@ export default function Products() {
         </div>
       </header>
 
-      {/* ── Sticky Filter Bar ────────────────────────── */}
       <div className="pm-filter-wrap">
         <div className="pm-filter-inner">
-
-          {/* Search icon */}
           <span className="pm-search-icon">
-            <svg width="15" height="15" viewBox="0 0 15 15" fill="none">
+            <svg width="15" height="15" viewBox="0 0 15 15" fill="none" aria-hidden="true">
               <circle cx="6.5" cy="6.5" r="5" stroke="currentColor" strokeWidth="1.5"/>
               <path d="M10.5 10.5L13.5 13.5" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/>
             </svg>
           </span>
 
-          {/* Keyword */}
+          <label htmlFor="products-search" className="pm-sr-only">Search products</label>
           <input
+            id="products-search"
             name="q"
             value={filters.q}
             onChange={change}
             className="pm-field pm-field-search"
             placeholder="Search tomatoes, seeds, fertilizer…"
+            type="search"
           />
 
-          {/* Category */}
           <div className="pm-select-wrap">
-            <select name="category" value={filters.category} onChange={change} className="pm-field pm-field-select">
+            <select name="category" value={filters.category} onChange={change} className="pm-field pm-field-select" aria-label="Filter by category">
               <option value="">All categories</option>
               {categories.map(c => (
                 <option key={c._id} value={c.slug || c._id}>{c.name}</option>
@@ -480,7 +588,6 @@ export default function Products() {
             </select>
           </div>
 
-          {/* Min price */}
           <input
             name="minPrice"
             value={filters.minPrice}
@@ -489,10 +596,10 @@ export default function Products() {
             placeholder="Min ৳"
             type="number"
             min="0"
+            aria-label="Minimum price"
             style={{ width: 88 }}
           />
 
-          {/* Max price */}
           <input
             name="maxPrice"
             value={filters.maxPrice}
@@ -501,21 +608,20 @@ export default function Products() {
             placeholder="Max ৳"
             type="number"
             min="0"
+            aria-label="Maximum price"
             style={{ width: 88 }}
           />
 
-          {/* Rating */}
           <div className="pm-select-wrap">
-            <select name="minRating" value={filters.minRating} onChange={change} className="pm-field pm-field-select">
+            <select name="minRating" value={filters.minRating} onChange={change} className="pm-field pm-field-select" aria-label="Minimum rating">
               <option value="">Any rating</option>
               <option value="4">4★ &amp; up</option>
               <option value="3">3★ &amp; up</option>
             </select>
           </div>
 
-          {/* Sort */}
           <div className="pm-select-wrap">
-            <select name="sort" value={filters.sort} onChange={change} className="pm-field pm-field-select">
+            <select name="sort" value={filters.sort} onChange={change} className="pm-field pm-field-select" aria-label="Sort products">
               <option value="newest">Newest</option>
               <option value="popular">Popular</option>
               <option value="rating">Top rated</option>
@@ -524,7 +630,6 @@ export default function Products() {
             </select>
           </div>
 
-          {/* In-stock */}
           <label className="pm-checkbox-wrap">
             <input
               name="inStock"
@@ -535,10 +640,9 @@ export default function Products() {
             In stock
           </label>
 
-          {/* Reset */}
           {activeFilterCount > 0 && (
-            <button onClick={reset} className="pm-reset-btn">
-              <svg width="12" height="12" viewBox="0 0 12 12" fill="none">
+            <button onClick={reset} className="pm-reset-btn" type="button">
+              <svg width="12" height="12" viewBox="0 0 12 12" fill="none" aria-hidden="true">
                 <path d="M1 1L11 11M11 1L1 11" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/>
               </svg>
               Clear {activeFilterCount > 1 ? `(${activeFilterCount})` : ""}
@@ -547,9 +651,8 @@ export default function Products() {
         </div>
       </div>
 
-      {/* ── Meta bar ─────────────────────────────────── */}
       <div className="pm-meta">
-        <p className="pm-count">
+        <p className="pm-count" aria-live="polite" aria-atomic="true">
           <strong>{meta.total}</strong> products
         </p>
         {meta.pages > 1 && (
@@ -557,8 +660,13 @@ export default function Products() {
         )}
       </div>
 
-      {/* ── Product Grid ──────────────────────────────── */}
       <div className="pm-grid-wrap">
+        {error && (
+          <div className="pm-error" role="alert">
+            <span>{error}</span>
+            <button type="button" onClick={loadProducts}>Retry</button>
+          </div>
+        )}
         {loading ? (
           <div className="pm-grid">
             {Array.from({ length: 8 }).map((_, i) => (
@@ -571,31 +679,32 @@ export default function Products() {
               <ProductCard key={product._id} product={product} />
             ))}
           </div>
-        ) : (
+        ) : !error && (
           <div className="pm-empty">
             <div className="pm-empty-icon">🔎</div>
             <div className="pm-empty-title">No products matched</div>
             <p className="pm-empty-msg">Try a different keyword, category, or price range.</p>
-            <button className="pm-empty-btn" onClick={reset}>Clear all filters</button>
+            <button className="pm-empty-btn" onClick={reset} type="button">Clear all filters</button>
           </div>
         )}
       </div>
 
-      {/* ── Pagination ────────────────────────────────── */}
       {meta.pages > 1 && (
         <div className="pm-pagination">
           <button
             disabled={meta.page <= 1}
-            onClick={() => setMeta(prev => ({ ...prev, page: prev.page - 1 }))}
+            onClick={() => setMeta(prev => ({ ...prev, page: Math.max(1, prev.page - 1) }))}
             className="pm-pag-btn"
+            type="button"
           >
             ← Prev
           </button>
           <span className="pm-pag-info">{meta.page} of {meta.pages}</span>
           <button
             disabled={meta.page >= meta.pages}
-            onClick={() => setMeta(prev => ({ ...prev, page: prev.page + 1 }))}
+            onClick={() => setMeta(prev => ({ ...prev, page: Math.min(prev.pages, prev.page + 1) }))}
             className="pm-pag-btn"
+            type="button"
           >
             Next →
           </button>

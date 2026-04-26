@@ -41,14 +41,14 @@ router.put(
 router.patch(
   "/:id/deactivate",
   protect,
-  authorizeRoles("admin"),
+  authorizeRoles("admin", "farmer"),
   deactivateProduct
 );
 
 router.patch(
   "/:id/activate",
   protect,
-  authorizeRoles("admin"),
+  authorizeRoles("admin", "farmer"),
   activateProduct
 );
 

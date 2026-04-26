@@ -115,10 +115,10 @@ export const createOrder = asyncHandler(async (req, res) => {
   const user = await User.findById(req.user._id);
 
   const cart = await Cart.findOne({ user: req.user._id });
-  const orderItems =
-    req.body.orderItems?.length
-      ? req.body.orderItems
-      : await buildItemsFromCart(cart);
+
+  // Always build order items from the authenticated user's cart. This prevents
+  // client-side price/quantity tampering during checkout.
+  const orderItems = await buildItemsFromCart(cart);
 
   const shippingAddress = resolveAddress(req.body, user);
   const couponCode = req.body.couponCode || cart?.coupon?.code;
@@ -195,6 +195,45 @@ export const getMyOrders = asyncHandler(async (req, res) => {
     orders,
     page: Number(page),
     pages: Math.ceil(total / Number(limit)),
+    total,
+  });
+});
+
+
+/**
+ * @desc    Get orders that contain the authenticated farmer's products
+ * @route   GET /api/orders/farmer
+ * @access  Farmer / Admin
+ */
+export const getFarmerOrders = asyncHandler(async (req, res) => {
+  const page = Math.max(Number(req.query.page) || 1, 1);
+  const limit = Math.min(Number(req.query.limit) || 20, 100);
+  const skip = (page - 1) * limit;
+
+  const filter = { "orderItems.farmer": req.user._id };
+  if (req.query.status) filter.status = req.query.status;
+
+  const [orders, total] = await Promise.all([
+    Order.find(filter)
+      .populate("user", "name email phone")
+      .sort({ createdAt: -1 })
+      .skip(skip)
+      .limit(limit)
+      .lean(),
+    Order.countDocuments(filter),
+  ]);
+
+  const farmerId = req.user._id.toString();
+  const scopedOrders = orders.map((order) => ({
+    ...order,
+    orderItems: order.orderItems.filter((item) => item.farmer?.toString() === farmerId),
+  }));
+
+  res.json({
+    success: true,
+    orders: scopedOrders,
+    page,
+    pages: Math.ceil(total / limit) || 1,
     total,
   });
 });

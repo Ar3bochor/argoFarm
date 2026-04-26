@@ -3,7 +3,7 @@ import User from "../models/User.js";
 import Order from "../models/Order.js";
 
 export const getUserProfile = asyncHandler(async (req, res) => {
-  res.json(req.user);
+  res.json({ success: true, data: req.user });
 });
 
 export const updateUserProfile = asyncHandler(async (req, res) => {
@@ -18,19 +18,12 @@ export const updateUserProfile = asyncHandler(async (req, res) => {
   user.phone = req.body.phone ?? user.phone;
 
   const updated = await user.save();
-  res.json({
-    _id:       updated._id,
-    name:      updated.name,
-    email:     updated.email,
-    role:      updated.role,
-    phone:     updated.phone,
-    addresses: updated.addresses,
-  });
+  res.json({ success: true, data: { _id: updated._id, name: updated.name, email: updated.email, role: updated.role, phone: updated.phone, addresses: updated.addresses } });
 });
 
 export const getAddresses = asyncHandler(async (req, res) => {
   const user = await User.findById(req.user._id).select("addresses");
-  res.json(user.addresses);
+  res.json({ success: true, data: user.addresses });
 });
 
 export const addAddress = asyncHandler(async (req, res) => {
@@ -59,7 +52,7 @@ export const addAddress = asyncHandler(async (req, res) => {
   });
 
   await user.save();
-  res.status(201).json(user.addresses);
+  res.status(201).json({ success: true, data: user.addresses });
 });
 
 export const updateAddress = asyncHandler(async (req, res) => {
@@ -78,14 +71,14 @@ export const updateAddress = asyncHandler(async (req, res) => {
 
   Object.assign(address, req.body);
   await user.save();
-  res.json(user.addresses);
+  res.json({ success: true, data: user.addresses });
 });
 
 export const deleteAddress = asyncHandler(async (req, res) => {
   const user = await User.findById(req.user._id);
   user.addresses = user.addresses.filter((addr) => addr._id.toString() !== req.params.id);
   await user.save();
-  res.json(user.addresses);
+  res.json({ success: true, data: user.addresses });
 });
 
 export const deleteAccount = asyncHandler(async (req, res) => {

@@ -30,8 +30,8 @@ export default function ProductDetails() {
           productService.getProductById(id),
           reviewService.getProductReviews(id).catch(() => ({ data: [] }))
         ]);
-        setProduct(productRes.data);
-        setReviews(reviewRes.data || []);
+        setProduct(productRes.data?.data ?? productRes.data);
+        setReviews(reviewRes.data?.reviews || reviewRes.data || []);
       } catch {
         setProduct(null);
       } finally {

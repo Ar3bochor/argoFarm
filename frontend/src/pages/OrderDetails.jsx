@@ -18,8 +18,8 @@ export default function OrderDetails() {
       setLoading(true);
       try {
         const [orderRes, trackRes] = await Promise.all([orderService.getOrderById(id), orderService.trackOrder(id)]);
-        setOrder(orderRes.data);
-        setTracking(trackRes.data);
+        setOrder(orderRes.data?.data ?? orderRes.data);
+        setTracking(trackRes.data?.data ?? trackRes.data);
       } catch {
         setOrder(null);
       } finally {

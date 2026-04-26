@@ -1,8 +1,7 @@
 import API from "./api";
 
-export const getProducts    = (params = {}, config = {}) => API.get("/products", { params, ...config });
+export const getProducts    = (params) => API.get("/products", { params });
 export const getFeatured    = ()       => API.get("/products/featured");
-export const getFeaturedProducts = getFeatured;
 export const getProductById = (id)     => API.get(`/products/${id}`);
 export const getRelated     = (id)     => API.get(`/products/${id}/related`);
 

@@ -40,12 +40,12 @@ export default function AdminDashboard() {
         adminService.getSalesReport(),
         couponService.getCoupons().catch(() => ({ data: [] }))
       ]);
-      setStats(statsRes.data || {});
+      setStats(statsRes.data?.data || statsRes.data || {});
       setProducts(productRes.data?.products || productRes.data || []);
-      setCategories(categoryRes.data || []);
-      setOrders(orderRes.data || []);
-      setReviews(reviewRes.data || []);
-      setReport(reportRes.data || { report: [], topProducts: [] });
+      setCategories(categoryRes.data?.data || categoryRes.data || []);
+      setOrders(orderRes.data?.orders || orderRes.data || []);
+      setReviews(reviewRes.data?.reviews || reviewRes.data || []);
+      const rData = reportRes.data?.data || reportRes.data || {}; setReport({ report: rData.dailyReport || rData.report || [], topProducts: rData.topProducts || [] });
       setCoupons(couponRes.data || []);
     } finally {
       setLoading(false);
@@ -171,11 +171,11 @@ export default function AdminDashboard() {
       {activeTab === "overview" && (
         <div className="grid gap-6">
           <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-5">
-            <AdminStat label="Users" value={stats.users || 0} />
-            <AdminStat label="Products" value={stats.products || 0} />
+            <AdminStat label="Users" value={stats.users?.total ?? stats.users ?? 0} />
+            <AdminStat label="Products" value={stats.products?.total ?? stats.products ?? 0} />
             <AdminStat label="Categories" value={stats.categories || 0} />
-            <AdminStat label="Orders" value={stats.orders || 0} />
-            <AdminStat label="Revenue" value={currency(stats.revenue || 0)} />
+            <AdminStat label="Orders" value={stats.orders?.total ?? stats.orders ?? 0} />
+            <AdminStat label="Revenue" value={currency(stats.revenue?.total ?? stats.revenue ?? 0)} />
           </div>
           <div className="grid gap-6 lg:grid-cols-2">
             <RecentOrders orders={orders.slice(0, 5)} onStatus={changeOrderStatus} />

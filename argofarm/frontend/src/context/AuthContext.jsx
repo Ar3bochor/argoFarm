@@ -35,11 +35,8 @@ export const AuthProvider = ({ children }) => {
       }
       setUser(userData);
       return userData;
-    } catch (err) {
-      const status = err?.response?.status;
-      if (status === 401 || status === 403) {
-        logout();
-      }
+    } catch {
+      logout();
       return null;
     } finally {
       setLoading(false);

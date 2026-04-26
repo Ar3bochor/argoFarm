@@ -34,6 +34,23 @@ const resolveCategory = async (category) => {
 export const getProducts = asyncHandler(async (req, res) => {
   const { page, limit, skip } = getPagination(req.query);
   const filters = buildProductFilters(req.query);
+  const canSeeInactive = req.query.includeInactive === "true" && ["admin", "farmer"].includes(req.user?.role);
+
+  if (canSeeInactive) {
+    delete filters.isActive;
+  }
+
+  if (req.query.mine === "true") {
+    if (req.user?.role !== "farmer") {
+      res.status(403);
+      throw new Error("Only farmers can request their own product list");
+    }
+    filters.farmer = req.user._id;
+  }
+
+  if (req.query.farmer && req.user?.role === "admin") {
+    filters.farmer = req.query.farmer;
+  }
 
   // Category filter
   if (req.query.category) {
@@ -44,24 +61,13 @@ export const getProducts = asyncHandler(async (req, res) => {
     filters.category = categoryId;
   }
 
-  // Full-text search (uses Mongo text index — much faster than $regex)
-  let sort = getProductSort(req.query.sort);
-  if (req.query.keyword || req.query.search || req.query.q) {
-    const keyword = (req.query.keyword || req.query.search || req.query.q).trim();
-
-    // Use $text search if the query looks like a full text search
-    if (keyword.length >= 2) {
-      delete filters.$or; // remove regex fallback built in apiFeatures
-      filters.$text = { $search: keyword };
-      // Add text score for relevance sorting when no explicit sort is given
-      if (!req.query.sort) {
-        sort = { score: { $meta: "textScore" }, ...sort };
-      }
-    }
-  }
+  // Keep regex-based search so partial product searches such as "tom" still
+  // match "tomato". Mongo text search is useful, but it does not behave like
+  // ecommerce autocomplete for partial words.
+  const sort = getProductSort(req.query.sort);
 
   const [products, total] = await Promise.all([
-    Product.find(filters, req.query.keyword ? { score: { $meta: "textScore" } } : {})
+    Product.find(filters)
       .populate("category", "name slug")
       .sort(sort)
       .skip(skip)
@@ -245,18 +251,18 @@ export const deleteProduct = asyncHandler(async (req, res) => {
  * @access  Admin
  */
 export const deactivateProduct = asyncHandler(async (req, res) => {
-  const product = await Product.findByIdAndUpdate(
-    req.params.id,
-    { isActive: false },
-    { new: true }
-  );
-
+  const product = await Product.findById(req.params.id);
   if (!product) {
     res.status(404);
     throw new Error("Product not found");
   }
-
-  res.json({ success: true, data: product });
+  if (req.user.role === "farmer" && product.farmer?.toString() !== req.user._id.toString()) {
+    res.status(403);
+    throw new Error("Not authorized to update this product");
+  }
+  product.isActive = false;
+  const updated = await product.save();
+  res.json({ success: true, data: updated });
 });
 
 /**
@@ -265,16 +271,16 @@ export const deactivateProduct = asyncHandler(async (req, res) => {
  * @access  Admin
  */
 export const activateProduct = asyncHandler(async (req, res) => {
-  const product = await Product.findByIdAndUpdate(
-    req.params.id,
-    { isActive: true },
-    { new: true }
-  );
-
+  const product = await Product.findById(req.params.id);
   if (!product) {
     res.status(404);
     throw new Error("Product not found");
   }
-
-  res.json({ success: true, data: product });
+  if (req.user.role === "farmer" && product.farmer?.toString() !== req.user._id.toString()) {
+    res.status(403);
+    throw new Error("Not authorized to update this product");
+  }
+  product.isActive = true;
+  const updated = await product.save();
+  res.json({ success: true, data: updated });
 });

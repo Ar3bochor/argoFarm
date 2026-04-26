@@ -27,8 +27,8 @@ export default function UserDashboard() {
     setLoading(true);
     try {
       const [ordersRes, addressRes] = await Promise.all([orderService.getMyOrders(), userService.getAddresses()]);
-      setOrders(ordersRes.data || []);
-      setAddresses(addressRes.data || []);
+      setOrders(ordersRes.data?.orders || ordersRes.data || []);
+      setAddresses(addressRes.data?.data || addressRes.data || []);
     } finally {
       setLoading(false);
     }
@@ -84,7 +84,7 @@ export default function UserDashboard() {
     setMessage("");
     try {
       const { data } = await userService.updateProfile(profile);
-      setUser(data);
+      setUser(data?.data ?? data);
       setMessage("Profile updated successfully.");
     } catch (err) {
       setMessage(getErrorMessage(err, "Could not update profile"));

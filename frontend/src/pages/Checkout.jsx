@@ -25,7 +25,7 @@ export default function Checkout() {
 
   const loadAddresses = async () => {
     const { data } = await userService.getAddresses();
-    setAddresses(data || []);
+    setAddresses(data?.data || data || []);
     const defaultAddress = data?.find((addr) => addr.isDefault) || data?.[0];
     if (defaultAddress) setSelectedAddress(defaultAddress._id);
   };
@@ -39,7 +39,7 @@ export default function Checkout() {
     const loadSummary = async () => {
       try {
         const { data } = await orderService.getOrderSummary({ deliverySlot, paymentMethod, couponCode: cart?.coupon?.code });
-        setSummary(data);
+        setSummary(data?.data ?? data);
       } catch {
         setSummary(null);
       }
@@ -63,7 +63,7 @@ export default function Checkout() {
     try {
       const { data } = await orderService.createOrder({ addressId: selectedAddress, deliverySlot, paymentMethod, couponCode: cart?.coupon?.code });
       await refreshCart();
-      navigate(`/orders/${data.order._id}`);
+      const orderData = data?.data ?? data; navigate(`/orders/${orderData?.order?._id}`);
     } catch (err) {
       setMessage(getErrorMessage(err, "Could not place order"));
     } finally {

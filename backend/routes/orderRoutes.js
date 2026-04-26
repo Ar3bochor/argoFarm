@@ -2,6 +2,7 @@ import { Router } from "express";
 import {
   createOrder,
   getMyOrders,
+  getFarmerOrders,
   getOrderById,
   getOrderSummary,
   markOrderPaid,
@@ -18,6 +19,7 @@ router.use(protect);
 router.post("/summary",     sanitizeBody, getOrderSummary);
 router.post("/",            sanitizeBody, createOrder);
 router.get("/my",           getMyOrders);
+router.get("/farmer",       authorizeRoles("farmer", "admin"), getFarmerOrders);
 
 router.get("/:id",          getOrderById);
 router.get("/:id/track",    trackOrder);
