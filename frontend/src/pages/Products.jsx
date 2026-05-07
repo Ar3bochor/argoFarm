@@ -1,9 +1,21 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+/**
+ * Products Page
+ * ─────────────
+ * Uses Feature 1 (ProductListingFeature) and Feature 2 (SearchFilterSortFeature)
+ * to provide the full product browsing experience.
+ */
+import { useEffect, useMemo, useState } from "react";
 import { useSearchParams } from "react-router-dom";
-import ProductCard from "../components/ProductCard";
-import * as productService from "../services/productService";
-import * as categoryService from "../services/categoryService";
-import { getErrorMessage } from "../utils/helpers";
+import ProductListingFeature from "../features/ProductListingFeature";
+import SearchFilterSortFeature, {
+  defaultFilters,
+  parseFiltersFromURL,
+  parsePageFromURL,
+  filtersEqual,
+  buildSearchParams,
+  buildAPIQuery,
+  countActiveFilters,
+} from "../features/SearchFilterSortFeature";
 
 const css = `
   @import url('https://fonts.googleapis.com/css2?family=Syne:wght@400;500;600;700;800&family=Instrument+Sans:wght@400;500;600&display=swap');
@@ -271,23 +283,6 @@ const css = `
     color: #888;
     margin-bottom: 24px;
   }
-  .pm-empty-btn {
-    display: inline-flex;
-    align-items: center;
-    gap: 8px;
-    padding: 10px 24px;
-    background: #0d0d0d;
-    color: #fff;
-    font-family: 'Instrument Sans', sans-serif;
-    font-size: 13px;
-    font-weight: 600;
-    letter-spacing: 0.04em;
-    border: none;
-    cursor: pointer;
-    text-decoration: none;
-    transition: background 0.15s;
-  }
-  .pm-empty-btn:hover { background: #222; }
   .pm-error {
     background: #fff5f5;
     border: 1px solid #fecaca;
@@ -383,87 +378,26 @@ const css = `
   }
 `;
 
-
-const defaultFilters = {
-  q: "",
-  category: "",
-  sort: "newest",
-  minPrice: "",
-  maxPrice: "",
-  minRating: "",
-  inStock: false
-};
-
-const parseFilters = (searchParams) => ({
-  q: searchParams.get("q") || "",
-  category: searchParams.get("category") || "",
-  sort: searchParams.get("sort") || defaultFilters.sort,
-  minPrice: searchParams.get("minPrice") || "",
-  maxPrice: searchParams.get("maxPrice") || "",
-  minRating: searchParams.get("minRating") || "",
-  inStock: searchParams.get("inStock") === "true",
-});
-
-const parsePage = (searchParams) => Math.max(1, Number(searchParams.get("page")) || 1);
-
-const filtersEqual = (a, b) => Object.keys(defaultFilters).every((key) => a[key] === b[key]);
-
-const buildSearchParams = (filters, page) => {
-  const params = new URLSearchParams();
-  if (filters.q) params.set("q", filters.q);
-  if (filters.category) params.set("category", filters.category);
-  if (filters.sort && filters.sort !== defaultFilters.sort) params.set("sort", filters.sort);
-  if (filters.minPrice) params.set("minPrice", filters.minPrice);
-  if (filters.maxPrice) params.set("maxPrice", filters.maxPrice);
-  if (filters.minRating) params.set("minRating", filters.minRating);
-  if (filters.inStock) params.set("inStock", "true");
-  if (page > 1) params.set("page", String(page));
-  return params;
-};
-
-const unwrapProducts = (body) => {
-  if (Array.isArray(body)) return body;
-  if (Array.isArray(body?.products)) return body.products;
-  if (Array.isArray(body?.data?.products)) return body.data.products;
-  if (Array.isArray(body?.data)) return body.data;
-  return [];
-};
-
 export default function Products() {
   const [searchParams, setSearchParams] = useSearchParams();
   const searchParamsString = searchParams.toString();
-  const [filters, setFilters] = useState(() => parseFilters(searchParams));
-  const [products, setProducts] = useState([]);
-  const [meta, setMeta] = useState(() => ({ page: parsePage(searchParams), pages: 1, total: 0 }));
-  const [categories, setCategories] = useState([]);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState("");
-  const requestIdRef = useRef(0);
-  const abortRef = useRef(null);
+  const [filters, setFilters] = useState(() => parseFiltersFromURL(searchParams));
+  const [meta, setMeta] = useState(() => ({
+    page: parsePageFromURL(searchParams),
+    pages: 1,
+    total: 0,
+  }));
 
-  useEffect(() => {
-    let active = true;
-    categoryService.getCategories()
-      .then(({ data }) => {
-        if (active) {
-          setCategories(Array.isArray(data?.data) ? data.data : []);  // Ensure it's always an array
-        }
-      })
-      .catch(() => {
-        if (active) setCategories([]);  // Fallback to an empty array on error
-      });
-    return () => { active = false; };
-  }, []);
-
+  // Sync URL → state
   useEffect(() => {
     const nextParams = new URLSearchParams(searchParamsString);
-    const nextFilters = parseFilters(nextParams);
-    const nextPage = parsePage(nextParams);
-
+    const nextFilters = parseFiltersFromURL(nextParams);
+    const nextPage = parsePageFromURL(nextParams);
     setFilters((prev) => (filtersEqual(prev, nextFilters) ? prev : nextFilters));
     setMeta((prev) => (prev.page === nextPage ? prev : { ...prev, page: nextPage }));
   }, [searchParamsString]);
 
+  // Sync state → URL
   useEffect(() => {
     const next = buildSearchParams(filters, meta.page);
     if (next.toString() !== searchParamsString) {
@@ -471,78 +405,33 @@ export default function Products() {
     }
   }, [filters, meta.page, searchParamsString, setSearchParams]);
 
-  const query = useMemo(() => {
-    const params = { limit: 12, page: meta.page || 1, sort: filters.sort };
-    Object.entries(filters).forEach(([key, value]) => {
-      if (value !== "" && value !== false && value !== null && value !== undefined) params[key] = value;
-    });
-    if (filters.q) params.keyword = filters.q;
-    return params;
-  }, [filters, meta.page]);
+  // Build API query from current filters + page
+  const query = useMemo(
+    () => buildAPIQuery(filters, meta.page),
+    [filters, meta.page]
+  );
 
-  const loadProducts = useCallback(() => {
-    if (abortRef.current) abortRef.current.abort();
-    const controller = new AbortController();
-    abortRef.current = controller;
-    const requestId = ++requestIdRef.current;
+  const activeFilterCount = countActiveFilters(filters);
 
-    setLoading(true);
-    setError("");
-
-    productService.getProducts(query, { signal: controller.signal })
-      .then(({ data }) => {
-        if (requestId !== requestIdRef.current) return;
-        const nextProducts = unwrapProducts(data);
-        const nextPages = Math.max(Number(data?.pages ?? data?.data?.pages) || 1, 1);
-        const requestedPage = Math.max(Number(query.page) || 1, 1);
-        const safePage = Math.min(requestedPage, nextPages);
-
-        setProducts(nextProducts);
-        setMeta({
-          page: safePage,
-          pages: nextPages,
-          total: Number(data?.total ?? data?.data?.total ?? nextProducts.length) || 0,
-        });
-      })
-      .catch((err) => {
-        if (err?.code === "ERR_CANCELED" || requestId !== requestIdRef.current) return;
-        setProducts([]);
-        setMeta({ page: 1, pages: 1, total: 0 });
-        setError(getErrorMessage(err, "Unable to load products. Please check that the backend server is running."));
-      })
-      .finally(() => {
-        if (requestId === requestIdRef.current) setLoading(false);
-      });
-  }, [query]);
-
-  useEffect(() => {
-    const timer = setTimeout(loadProducts, 250);
-    return () => {
-      clearTimeout(timer);
-      if (abortRef.current) abortRef.current.abort();
-    };
-  }, [loadProducts]);
-
-  const change = (e) => {
+  const handleFilterChange = (e) => {
     const { name, value, type, checked } = e.target;
-    setMeta(prev => ({ ...prev, page: 1 }));
-    setFilters(prev => ({ ...prev, [name]: type === "checkbox" ? checked : value }));
+    setMeta((prev) => ({ ...prev, page: 1 }));
+    setFilters((prev) => ({
+      ...prev,
+      [name]: type === "checkbox" ? checked : value,
+    }));
   };
 
-  const reset = () => {
+  const handleFilterReset = () => {
     setFilters(defaultFilters);
-    setMeta(prev => ({ ...prev, page: 1 }));
-    setError("");
+    setMeta((prev) => ({ ...prev, page: 1 }));
   };
-
-  const activeFilterCount = Object.entries(filters).filter(([k, v]) =>
-    v !== "" && v !== false && v !== defaultFilters[k]
-  ).length;
 
   return (
     <main className="pm">
       <style>{css}</style>
 
+      {/* Hero header */}
       <header className="pm-header">
         <div className="pm-header-inner">
           <div className="pm-eyebrow">
@@ -559,150 +448,61 @@ export default function Products() {
         </div>
       </header>
 
-      <div className="pm-filter-wrap">
-        <div className="pm-filter-inner">
-          <span className="pm-search-icon">
-            <svg width="15" height="15" viewBox="0 0 15 15" fill="none" aria-hidden="true">
-              <circle cx="6.5" cy="6.5" r="5" stroke="currentColor" strokeWidth="1.5"/>
-              <path d="M10.5 10.5L13.5 13.5" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/>
-            </svg>
-          </span>
+      {/* Feature 2: Search, Filter & Sort */}
+      <SearchFilterSortFeature
+        filters={filters}
+        onChange={handleFilterChange}
+        onReset={handleFilterReset}
+        activeFilterCount={activeFilterCount}
+      />
 
-          <label htmlFor="products-search" className="pm-sr-only">Search products</label>
-          <input
-            id="products-search"
-            name="q"
-            value={filters.q}
-            onChange={change}
-            className="pm-field pm-field-search"
-            placeholder="Search tomatoes, seeds, fertilizer…"
-            type="search"
-          />
-
-          <div className="pm-select-wrap">
-            <select name="category" value={filters.category} onChange={change} className="pm-field pm-field-select" aria-label="Filter by category">
-              <option value="">All categories</option>
-              {categories.map(c => (
-                <option key={c._id} value={c.slug || c._id}>{c.name}</option>
-              ))}
-            </select>
-          </div>
-
-          <input
-            name="minPrice"
-            value={filters.minPrice}
-            onChange={change}
-            className="pm-field"
-            placeholder="Min ৳"
-            type="number"
-            min="0"
-            aria-label="Minimum price"
-            style={{ width: 88 }}
-          />
-
-          <input
-            name="maxPrice"
-            value={filters.maxPrice}
-            onChange={change}
-            className="pm-field"
-            placeholder="Max ৳"
-            type="number"
-            min="0"
-            aria-label="Maximum price"
-            style={{ width: 88 }}
-          />
-
-          <div className="pm-select-wrap">
-            <select name="minRating" value={filters.minRating} onChange={change} className="pm-field pm-field-select" aria-label="Minimum rating">
-              <option value="">Any rating</option>
-              <option value="4">4★ &amp; up</option>
-              <option value="3">3★ &amp; up</option>
-            </select>
-          </div>
-
-          <div className="pm-select-wrap">
-            <select name="sort" value={filters.sort} onChange={change} className="pm-field pm-field-select" aria-label="Sort products">
-              <option value="newest">Newest</option>
-              <option value="popular">Popular</option>
-              <option value="rating">Top rated</option>
-              <option value="price_asc">Price ↑</option>
-              <option value="price_desc">Price ↓</option>
-            </select>
-          </div>
-
-          <label className="pm-checkbox-wrap">
-            <input
-              name="inStock"
-              type="checkbox"
-              checked={filters.inStock}
-              onChange={change}
-            />
-            In stock
-          </label>
-
-          {activeFilterCount > 0 && (
-            <button onClick={reset} className="pm-reset-btn" type="button">
-              <svg width="12" height="12" viewBox="0 0 12 12" fill="none" aria-hidden="true">
-                <path d="M1 1L11 11M11 1L1 11" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/>
-              </svg>
-              Clear {activeFilterCount > 1 ? `(${activeFilterCount})` : ""}
-            </button>
-          )}
-        </div>
-      </div>
-
+      {/* Meta bar */}
       <div className="pm-meta">
         <p className="pm-count" aria-live="polite" aria-atomic="true">
           <strong>{meta.total}</strong> products
         </p>
         {meta.pages > 1 && (
-          <p className="pm-pagination-label">Page {meta.page} / {meta.pages}</p>
+          <p className="pm-pagination-label">
+            Page {meta.page} / {meta.pages}
+          </p>
         )}
       </div>
 
+      {/* Feature 1: Product Listing Grid */}
       <div className="pm-grid-wrap">
-        {error && (
-          <div className="pm-error" role="alert">
-            <span>{error}</span>
-            <button type="button" onClick={loadProducts}>Retry</button>
-          </div>
-        )}
-        {loading ? (
-          <div className="pm-grid">
-            {Array.from({ length: 8 }).map((_, i) => (
-              <div key={i} className="pm-skeleton" />
-            ))}
-          </div>
-        ) : products.length ? (
-          <div className="pm-grid">
-            {products.map(product => (
-              <ProductCard key={product._id} product={product} />
-            ))}
-          </div>
-        ) : !error && (
-          <div className="pm-empty">
-            <div className="pm-empty-icon">🔎</div>
-            <div className="pm-empty-title">No products matched</div>
-            <p className="pm-empty-msg">Try a different keyword, category, or price range.</p>
-            <button className="pm-empty-btn" onClick={reset} type="button">Clear all filters</button>
-          </div>
-        )}
+        <ProductListingFeature
+          query={query}
+          onMetaChange={(m) => setMeta(m)}
+        />
       </div>
 
+      {/* Pagination */}
       {meta.pages > 1 && (
         <div className="pm-pagination">
           <button
             disabled={meta.page <= 1}
-            onClick={() => setMeta(prev => ({ ...prev, page: Math.max(1, prev.page - 1) }))}
+            onClick={() =>
+              setMeta((prev) => ({
+                ...prev,
+                page: Math.max(1, prev.page - 1),
+              }))
+            }
             className="pm-pag-btn"
             type="button"
           >
             ← Prev
           </button>
-          <span className="pm-pag-info">{meta.page} of {meta.pages}</span>
+          <span className="pm-pag-info">
+            {meta.page} of {meta.pages}
+          </span>
           <button
             disabled={meta.page >= meta.pages}
-            onClick={() => setMeta(prev => ({ ...prev, page: Math.min(prev.pages, prev.page + 1) }))}
+            onClick={() =>
+              setMeta((prev) => ({
+                ...prev,
+                page: Math.min(prev.pages, prev.page + 1),
+              }))
+            }
             className="pm-pag-btn"
             type="button"
           >
