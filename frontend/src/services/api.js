@@ -17,32 +17,46 @@ import axios from "axios";
  * so withCredentials is not needed and causes more problems than it solves.
  */
 const API = axios.create({
-  baseURL: import.meta.env.VITE_API_URL || "http://localhost:3000/api",
+  baseURL: import.meta.env.VITE_API_URL || "http://localhost:5000/api",
   timeout: 15000,
   // Removed withCredentials: true — we use Authorization header, not cookies
 });
 
 // Attach JWT to every request
-API.interceptors.request.use((config) => {
-  const token = localStorage.getItem("token");
-  if (token) config.headers.Authorization = `Bearer ${token}`;
-  return config;
-});
+API.interceptors.request.use(
+  (config) => {
+    const token = localStorage.getItem("token");
+
+    if (token) {
+      config.headers.Authorization = `Bearer ${token}`;
+    }
+
+    return config;
+  },
+  (error) => {
+    return Promise.reject(error);
+  }
+);
 
 // Only clear token on real auth failures, not every 401
 API.interceptors.response.use(
   (response) => response,
   (error) => {
     const status = error?.response?.status;
-    const url    = error?.config?.url || "";
+    const url = error?.config?.url || "";
 
     // Only log out if the /auth/me or /auth/login endpoint returns 401.
     // This means the token is genuinely invalid/expired — not just a
     // permission error on a different resource.
-    if (status === 401 && (url.includes("/auth/me") || url.includes("/auth/login"))) {
+    if (
+      status === 401 &&
+      (url.includes("/auth/me") || url.includes("/auth/login"))
+    ) {
       localStorage.removeItem("token");
     }
 
     return Promise.reject(error);
   }
 );
+
+export default API;

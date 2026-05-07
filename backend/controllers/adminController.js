@@ -163,7 +163,7 @@ export const getSalesReport = asyncHandler(async (req, res) => {
           as:           "productInfo",
         },
       },
-      { $unwind: { path: "$productInfo", preserveNullAndEmpty: false } },
+      { $unwind: { path: "$productInfo", preserveNullAndEmptyArrays: false } },
       {
         $lookup: {
           from:         "categories",
@@ -172,7 +172,7 @@ export const getSalesReport = asyncHandler(async (req, res) => {
           as:           "categoryInfo",
         },
       },
-      { $unwind: { path: "$categoryInfo", preserveNullAndEmpty: false } },
+      { $unwind: { path: "$categoryInfo", preserveNullAndEmptyArrays: false } },
       {
         $group: {
           _id:     "$categoryInfo._id",
