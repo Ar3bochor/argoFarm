@@ -1,3 +1,8 @@
+// Path: backend/services/paymentService.js
+// Description: Handles payment session creation and marks 
+// orders as paid after successful payment confirmation.
+
+// Creates a payment session response based on the selected payment gateway.
 export const createPaymentSession = async ({ order, gateway, customer }) => {
   const selectedGateway = gateway || order.paymentMethod;
 
@@ -9,7 +14,6 @@ export const createPaymentSession = async ({ order, gateway, customer }) => {
     };
   }
 
-  // Placeholder adapter for SSLCommerz/Stripe. Add real SDK/API credentials in production.
   return {
     gateway: selectedGateway,
     status: "created",
@@ -25,14 +29,17 @@ export const createPaymentSession = async ({ order, gateway, customer }) => {
   };
 };
 
+// Updates an order document after payment is confirmed.
 export const markPaymentAsPaid = (order, paymentResult = {}) => {
   order.paymentStatus = "paid";
   order.isPaid = true;
   order.paidAt = new Date();
+
   order.paymentResult = {
     ...order.paymentResult,
     ...paymentResult,
     status: paymentResult.status || "paid",
   };
+
   return order;
 };

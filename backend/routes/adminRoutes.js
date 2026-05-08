@@ -1,3 +1,8 @@
+// Path: backend/routes/adminRoutes.js
+// Description: Defines admin-only routes 
+// for dashboard statistics, user management, 
+// order management, and sales reports.
+
 import { Router } from "express";
 import {
   getDashboardStats,
@@ -12,27 +17,22 @@ import { protect, authorizeRoles } from "../middleware/authMiddleware.js";
 
 const router = Router();
 
-// All admin routes require authentication + admin role
+// All admin routes require authentication and admin role access.
 router.use(protect, authorizeRoles("admin"));
 
-// Dashboard
+// Dashboard route
 router.get("/dashboard",         getDashboardStats);
 
-// Users
+// User management routes
 router.get("/users",             getUsers);
 router.put("/users/:id",         updateUser);
 router.delete("/users/:id",      deleteUser);
 
-// Orders — updateOrderStatus lives here only (removed from orderRoutes)
+// Order management routes
 router.get("/orders",            getAllOrders);
 router.put("/orders/:id/status", updateOrderStatus);
 
-// Reports
+// Sales report route
 router.get("/reports/sales",     getSalesReport);
-
-// NOTE: Review routes removed from here — they are fully managed via
-// /api/reviews (reviewRoutes.js) which already enforces admin-only guards
-// on approve / reject / getAllReviews. Keeping them in one place avoids
-// duplicate route registrations.
 
 export default router;

@@ -1,3 +1,8 @@
+// Path: backend/controllers/authController.js
+// Description: Handles user authentication actions, 
+// including registration, login, profile retrieval, 
+// password updates, and logout response.
+
 import asyncHandler from "express-async-handler";
 import { register, login, changePassword } from "../services/authService.js";
 
@@ -9,7 +14,7 @@ import { register, login, changePassword } from "../services/authService.js";
 export const registerUser = asyncHandler(async (req, res) => {
   const { name, email, password, role, phone } = req.body;
 
-  // Prevent self-elevation to admin through the public endpoint
+  // Ensures users registered through the public endpoint receive a safe default role.
   const safeRole = role === "admin" ? "user" : (role || "user");
 
   const user = await register({ name, email, password, role: safeRole, phone });
@@ -24,6 +29,7 @@ export const registerUser = asyncHandler(async (req, res) => {
  */
 export const loginUser = asyncHandler(async (req, res) => {
   const user = await login(req.body);
+
   res.json({ success: true, data: user });
 });
 
@@ -33,6 +39,7 @@ export const loginUser = asyncHandler(async (req, res) => {
  * @access  Private
  */
 export const getMe = asyncHandler(async (req, res) => {
+  // req.user is added by the authentication middleware after token verification.
   res.json({ success: true, data: req.user });
 });
 
@@ -44,6 +51,7 @@ export const getMe = asyncHandler(async (req, res) => {
 export const updatePassword = asyncHandler(async (req, res) => {
   const { currentPassword, newPassword } = req.body;
 
+  // Both the current and new password are required to complete the update.
   if (!currentPassword || !newPassword) {
     res.status(400);
     throw new Error("currentPassword and newPassword are required");
@@ -60,15 +68,16 @@ export const updatePassword = asyncHandler(async (req, res) => {
   }
 
   const result = await changePassword(req.user._id, currentPassword, newPassword);
+
   res.json({ success: true, ...result });
 });
 
 /**
- * @desc    Logout (client-side token removal; stub for server-side blacklist)
+ * @desc    Logout user
  * @route   POST /api/auth/logout
  * @access  Private
  */
 export const logoutUser = asyncHandler(async (req, res) => {
-  // If you later add a token blacklist (e.g., Redis), invalidate here.
+  // Sends a successful logout response after the protected route confirms the user is authenticated.
   res.json({ success: true, message: "Logged out successfully" });
 });

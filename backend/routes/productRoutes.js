@@ -1,3 +1,8 @@
+// Path: backend/routes/productRoutes.js
+// Description: Defines product routes for browsing 
+// products publicly and managing product records through 
+// admin or farmer access.
+
 import { Router } from "express";
 import {
   createProduct,
@@ -15,13 +20,13 @@ import { sanitizeBody } from "../middleware/validateMiddleware.js";
 
 const router = Router();
 
-// Public
+// Public product browsing routes
 router.get("/",                 getProducts);
 router.get("/featured",         getFeaturedProducts);
 router.get("/:id",              getProductById);
 router.get("/:id/related",      getRelatedProducts);
 
-// Admin / Farmer
+// Admins and farmers can create new products.
 router.post(
   "/",
   protect,
@@ -30,6 +35,7 @@ router.post(
   createProduct
 );
 
+// Admins and farmers can update existing products.
 router.put(
   "/:id",
   protect,
@@ -38,20 +44,23 @@ router.put(
   updateProduct
 );
 
+// Admin-only route for deactivating a product.
 router.patch(
   "/:id/deactivate",
   protect,
-  authorizeRoles("admin", "farmer"),
+  authorizeRoles("admin"),
   deactivateProduct
 );
 
+// Admin-only route for reactivating a product.
 router.patch(
   "/:id/activate",
   protect,
-  authorizeRoles("admin", "farmer"),
+  authorizeRoles("admin"),
   activateProduct
 );
 
+// Admin-only route for deleting a product.
 router.delete(
   "/:id",
   protect,

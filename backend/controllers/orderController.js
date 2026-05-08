@@ -1,3 +1,8 @@
+// Path: backend/controllers/orderController.js
+// Description: Handles order checkout, order summaries, 
+// user order history, farmer order views, order tracking,
+// reordering, status updates, and payment updates.
+
 import asyncHandler from "express-async-handler";
 import Cart from "../models/Cart.js";
 import Order from "../models/Order.js";
@@ -8,10 +13,7 @@ import { buildOrderTotals } from "../services/orderService.js";
 import { createPaymentSession, markPaymentAsPaid } from "../services/paymentService.js";
 import { ensureProductStock } from "../services/productService.js";
 
-/**
- * Builds orderItems array from the user's active cart,
- * validating stock for each product.
- */
+// Builds order items from the authenticated user's cart and checks product availability.
 const buildItemsFromCart = async (cart) => {
   if (!cart?.items?.length) {
     const error = new Error("Cart is empty");
@@ -46,17 +48,17 @@ const buildItemsFromCart = async (cart) => {
   });
 };
 
-/**
- * Resolves shipping address from addressId or inline body.
- */
+// Resolves the shipping address from a saved address or direct checkout form data.
 const resolveAddress = (body, user) => {
   if (body.addressId) {
     const address = user.addresses?.find((a) => a._id.toString() === body.addressId);
+
     if (!address) {
       const error = new Error("Saved address not found");
       error.statusCode = 404;
       throw error;
     }
+
     const { _id, createdAt, updatedAt, ...rest } = address.toObject ? address.toObject() : address;
     return rest;
   }
@@ -81,12 +83,13 @@ const resolveAddress = (body, user) => {
 };
 
 /**
- * @desc    Get order summary (prices, taxes, shipping) before placing
+ * @desc    Get order summary before placing an order
  * @route   POST /api/orders/summary
  * @access  Private
  */
 export const getOrderSummary = asyncHandler(async (req, res) => {
   const cart = await Cart.findOne({ user: req.user._id });
+
   const items = await buildItemsFromCart(cart);
   const couponCode = req.body.couponCode || cart?.coupon?.code;
   const totals = await buildOrderTotals({ items, couponCode });
@@ -111,13 +114,10 @@ export const getOrderSummary = asyncHandler(async (req, res) => {
  * @access  Private
  */
 export const createOrder = asyncHandler(async (req, res) => {
-  // Fetch full user for address resolution
   const user = await User.findById(req.user._id);
-
   const cart = await Cart.findOne({ user: req.user._id });
 
-  // Always build order items from the authenticated user's cart. This prevents
-  // client-side price/quantity tampering during checkout.
+  // Order items are created from the server-side cart to keep pricing and quantities trusted.
   const orderItems = await buildItemsFromCart(cart);
 
   const shippingAddress = resolveAddress(req.body, user);
@@ -140,7 +140,7 @@ export const createOrder = asyncHandler(async (req, res) => {
     totalPrice:    totals.totalPrice,
   });
 
-  // Decrement stock and increment sold for each item
+  // Updates product stock and sold count after the order is created.
   const stockUpdates = orderItems.map((item) =>
     Product.findByIdAndUpdate(item.product, {
       $inc: {
@@ -150,12 +150,12 @@ export const createOrder = asyncHandler(async (req, res) => {
     })
   );
 
-  // Increment coupon usage
+  // Updates coupon usage when a valid coupon is applied.
   const couponUpdate = totals.coupon
     ? Coupon.findByIdAndUpdate(totals.coupon._id, { $inc: { usedCount: 1 } })
     : Promise.resolve();
 
-  // Clear cart
+  // Clears the user's cart after successful order creation.
   const cartClear = cart
     ? (cart.items = [], cart.coupon = undefined, cart.save())
     : Promise.resolve();
@@ -199,7 +199,6 @@ export const getMyOrders = asyncHandler(async (req, res) => {
   });
 });
 
-
 /**
  * @desc    Get orders that contain the authenticated farmer's products
  * @route   GET /api/orders/farmer
@@ -223,6 +222,7 @@ export const getFarmerOrders = asyncHandler(async (req, res) => {
     Order.countDocuments(filter),
   ]);
 
+  // Returns only the items that belong to the authenticated farmer.
   const farmerId = req.user._id.toString();
   const scopedOrders = orders.map((order) => ({
     ...order,
@@ -239,9 +239,9 @@ export const getFarmerOrders = asyncHandler(async (req, res) => {
 });
 
 /**
- * @desc    Get single order by ID
+ * @desc    Get a single order by ID
  * @route   GET /api/orders/:id
- * @access  Private (owner or admin)
+ * @access  Private
  */
 export const getOrderById = asyncHandler(async (req, res) => {
   const order = await Order.findById(req.params.id)
@@ -254,6 +254,7 @@ export const getOrderById = asyncHandler(async (req, res) => {
     throw new Error("Order not found");
   }
 
+  // Only the order owner or an admin can view the order.
   const isOwner = order.user._id.toString() === req.user._id.toString();
   if (!isOwner && req.user.role !== "admin") {
     res.status(403);
@@ -266,7 +267,7 @@ export const getOrderById = asyncHandler(async (req, res) => {
 /**
  * @desc    Track order status and history
  * @route   GET /api/orders/:id/track
- * @access  Private (owner or admin)
+ * @access  Private
  */
 export const trackOrder = asyncHandler(async (req, res) => {
   const order = await Order.findById(req.params.id)
@@ -278,6 +279,7 @@ export const trackOrder = asyncHandler(async (req, res) => {
     throw new Error("Order not found");
   }
 
+  // Only the order owner or an admin can track the order.
   const isOwner = order.user.toString() === req.user._id.toString();
   if (!isOwner && req.user.role !== "admin") {
     res.status(403);
@@ -288,9 +290,9 @@ export const trackOrder = asyncHandler(async (req, res) => {
 });
 
 /**
- * @desc    Add previous order items back to cart (reorder)
+ * @desc    Add previous order items back to the cart
  * @route   POST /api/orders/:id/reorder
- * @access  Private (owner only)
+ * @access  Private
  */
 export const reorder = asyncHandler(async (req, res) => {
   const order = await Order.findById(req.params.id).lean();
@@ -312,6 +314,7 @@ export const reorder = asyncHandler(async (req, res) => {
   const products = await Product.find({ _id: { $in: productIds } }).lean();
 
   let skipped = 0;
+
   for (const orderItem of order.orderItems) {
     const product = products.find((p) => p._id.toString() === orderItem.product.toString());
 
@@ -337,7 +340,9 @@ export const reorder = asyncHandler(async (req, res) => {
     }
   }
 
+  // Removes any applied coupon because cart contents have changed.
   cart.coupon = undefined;
+
   await cart.save();
 
   res.json({
@@ -349,8 +354,8 @@ export const reorder = asyncHandler(async (req, res) => {
 });
 
 /**
- * @desc    Update order status (admin only)
- * @route   PUT /api/orders/:id/status
+ * @desc    Update order status
+ * @route   PUT /api/admin/orders/:id/status
  * @access  Admin
  */
 export const updateOrderStatus = asyncHandler(async (req, res) => {
@@ -362,6 +367,7 @@ export const updateOrderStatus = asyncHandler(async (req, res) => {
   }
 
   const order = await Order.findById(req.params.id);
+
   if (!order) {
     res.status(404);
     throw new Error("Order not found");
@@ -369,7 +375,7 @@ export const updateOrderStatus = asyncHandler(async (req, res) => {
 
   const previousStatus = order.status;
 
-  // Prevent illegal status transitions
+  // Final order states cannot be changed back to another status.
   if (order.status === "cancelled" && status !== "cancelled") {
     res.status(400);
     throw new Error("Cannot change status of a cancelled order");
@@ -381,6 +387,7 @@ export const updateOrderStatus = asyncHandler(async (req, res) => {
   }
 
   order.status = status;
+
   order.statusHistory.push({
     status,
     note: note || `Status changed from ${previousStatus} to ${status}`,
@@ -392,7 +399,7 @@ export const updateOrderStatus = asyncHandler(async (req, res) => {
     order.deliveredAt = new Date();
   }
 
-  // Restore stock if cancelling
+  // Restores product stock when an order is cancelled.
   if (status === "cancelled" && previousStatus !== "cancelled") {
     const stockRestores = order.orderItems.map((item) =>
       Product.findByIdAndUpdate(item.product, {
@@ -402,10 +409,12 @@ export const updateOrderStatus = asyncHandler(async (req, res) => {
         },
       })
     );
+
     await Promise.all(stockRestores);
   }
 
   const updated = await order.save();
+
   res.json({ success: true, data: updated });
 });
 
@@ -428,6 +437,7 @@ export const markOrderPaid = asyncHandler(async (req, res) => {
   }
 
   markPaymentAsPaid(order, req.body.paymentResult);
+
   const updated = await order.save();
 
   res.json({ success: true, data: updated });

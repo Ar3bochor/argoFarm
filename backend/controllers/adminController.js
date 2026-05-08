@@ -1,3 +1,8 @@
+// Path: backend/controllers/adminController.js
+// Description: Handles admin dashboard data, 
+// order management, sales reports, user listing, 
+// user updates, and user deletion.
+
 import asyncHandler from "express-async-handler";
 import Order from "../models/Order.js";
 import Product from "../models/Product.js";
@@ -14,6 +19,7 @@ export const getDashboardStats = asyncHandler(async (req, res) => {
   const thirtyDaysAgo = new Date();
   thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
 
+  // Runs all dashboard count and revenue queries in parallel for better performance.
   const [
     totalUsers,
     newUsersThisMonth,
@@ -34,10 +40,14 @@ export const getDashboardStats = asyncHandler(async (req, res) => {
     Order.countDocuments(),
     Order.countDocuments({ status: "pending" }),
     Review.countDocuments({ status: "pending" }),
+
+    // Calculates total revenue from all non-cancelled orders.
     Order.aggregate([
       { $match: { status: { $nin: ["cancelled"] } } },
       { $group: { _id: null, revenue: { $sum: "$totalPrice" }, orders: { $sum: 1 } } },
     ]),
+
+    // Calculates revenue generated within the last 30 days.
     Order.aggregate([
       {
         $match: {
@@ -75,6 +85,7 @@ export const getAllOrders = asyncHandler(async (req, res) => {
   const limit = Math.min(Number(req.query.limit) || 20, 100);
   const skip  = (page - 1) * limit;
 
+  // Allows admins to filter orders by status.
   const filter = {};
   if (req.query.status) filter.status = req.query.status;
 
@@ -103,6 +114,7 @@ export const getAllOrders = asyncHandler(async (req, res) => {
  * @access  Admin
  */
 export const getSalesReport = asyncHandler(async (req, res) => {
+  // Uses the provided date range, or defaults to the last 30 days.
   const start = req.query.startDate
     ? new Date(req.query.startDate)
     : new Date(Date.now() - 30 * 24 * 60 * 60 * 1000);
@@ -115,13 +127,14 @@ export const getSalesReport = asyncHandler(async (req, res) => {
     throw new Error("startDate must be before endDate");
   }
 
+  // Base filter used by all sales report aggregations.
   const matchBase = {
     createdAt: { $gte: start, $lte: end },
     status: { $nin: ["cancelled"] },
   };
 
   const [dailyReport, topProducts, categoryRevenue, paymentMethods] = await Promise.all([
-    // Daily breakdown
+    // Groups sales by day for chart or table display.
     Order.aggregate([
       { $match: matchBase },
       {
@@ -135,7 +148,7 @@ export const getSalesReport = asyncHandler(async (req, res) => {
       { $sort: { _id: 1 } },
     ]),
 
-    // Top 10 products by revenue
+    // Finds the highest earning products within the selected period.
     Order.aggregate([
       { $match: matchBase },
       { $unwind: "$orderItems" },
@@ -151,7 +164,7 @@ export const getSalesReport = asyncHandler(async (req, res) => {
       { $limit: 10 },
     ]),
 
-    // Revenue by category
+    // Calculates revenue grouped by product category.
     Order.aggregate([
       { $match: matchBase },
       { $unwind: "$orderItems" },
@@ -183,7 +196,7 @@ export const getSalesReport = asyncHandler(async (req, res) => {
       { $sort: { revenue: -1 } },
     ]),
 
-    // Revenue by payment method
+    // Calculates order count and revenue for each payment method.
     Order.aggregate([
       { $match: matchBase },
       {
@@ -197,6 +210,7 @@ export const getSalesReport = asyncHandler(async (req, res) => {
     ]),
   ]);
 
+  // Summary values are calculated from the daily report results.
   const totalRevenue = dailyReport.reduce((s, d) => s + d.revenue, 0);
   const totalOrders  = dailyReport.reduce((s, d) => s + d.orders, 0);
 
@@ -223,6 +237,7 @@ export const getUsers = asyncHandler(async (req, res) => {
   const limit = Math.min(Number(req.query.limit) || 20, 100);
   const skip  = (page - 1) * limit;
 
+  // Supports filtering users by role and searching by name or email.
   const filter = {};
   if (req.query.role) filter.role = req.query.role;
   if (req.query.search) {
@@ -252,7 +267,7 @@ export const getUsers = asyncHandler(async (req, res) => {
 });
 
 /**
- * @desc    Update user role or status (admin only)
+ * @desc    Update user role or status
  * @route   PUT /api/admin/users/:id
  * @access  Admin
  */
@@ -264,7 +279,7 @@ export const updateUser = asyncHandler(async (req, res) => {
     throw new Error("User not found");
   }
 
-  // Prevent admin from editing themselves
+  // Prevents admins from changing their own account through this route.
   if (user._id.toString() === req.user._id.toString()) {
     res.status(400);
     throw new Error("Cannot modify your own admin account through this endpoint");
@@ -274,6 +289,7 @@ export const updateUser = asyncHandler(async (req, res) => {
   if (req.body.name) user.name = req.body.name;
 
   const updated = await user.save();
+
   res.json({
     success: true,
     data: {
@@ -286,7 +302,7 @@ export const updateUser = asyncHandler(async (req, res) => {
 });
 
 /**
- * @desc    Delete a user account (admin only)
+ * @desc    Delete a user account
  * @route   DELETE /api/admin/users/:id
  * @access  Admin
  */
@@ -298,11 +314,13 @@ export const deleteUser = asyncHandler(async (req, res) => {
     throw new Error("User not found");
   }
 
+  // Admin accounts are protected from deletion through this endpoint.
   if (user.role === "admin") {
     res.status(400);
     throw new Error("Cannot delete an admin account");
   }
 
   await user.deleteOne();
+
   res.json({ success: true, message: "User deleted successfully" });
 });

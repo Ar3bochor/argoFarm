@@ -1,3 +1,7 @@
+// Path: backend/routes/couponRoutes.js
+// Description: Defines coupon routes for validating coupons 
+// and managing coupon records through admin-only actions.
+
 import { Router } from "express";
 import {
   createCoupon,
@@ -11,10 +15,10 @@ import { sanitizeBody } from "../middleware/validateMiddleware.js";
 
 const router = Router();
 
-// Any logged-in user can validate a coupon
+// Authenticated users can validate coupons during checkout.
 router.post("/validate", protect, sanitizeBody, validateCoupon);
 
-// Admin only
+// Admin-only coupon management routes
 router.get("/",      protect, authorizeRoles("admin"), getCoupons);
 router.post("/",     protect, authorizeRoles("admin"), sanitizeBody, createCoupon);
 router.put("/:id",   protect, authorizeRoles("admin"), sanitizeBody, updateCoupon);

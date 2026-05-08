@@ -1,3 +1,8 @@
+// Path: backend/routes/categoryRoutes.js
+// Description: Defines category routes for viewing 
+// categories publicly and managing categories through 
+// admin-only actions.
+
 import { Router } from "express";
 import {
   createCategory,
@@ -11,9 +16,11 @@ import { sanitizeBody } from "../middleware/validateMiddleware.js";
 
 const router = Router();
 
-router.get("/",    optionalAuth, getCategories);   // optionalAuth to allow admin to see inactive
+// Public category routes
+router.get("/",    optionalAuth, getCategories);
 router.get("/:id", getCategoryById);
 
+// Admin-only category management routes
 router.post("/",   protect, authorizeRoles("admin"), sanitizeBody, createCategory);
 router.put("/:id", protect, authorizeRoles("admin"), sanitizeBody, updateCategory);
 router.delete("/:id", protect, authorizeRoles("admin"), deleteCategory);

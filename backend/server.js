@@ -1,3 +1,9 @@
+// Path: backend/server.js
+// Description: Main Express server file that 
+// configures middleware, connects the database, 
+// registers API routes, handles errors, and 
+// starts the server.
+
 import express from "express";
 import dotenv from "dotenv";
 import cors from "cors";
@@ -25,27 +31,27 @@ connectDB();
 
 const app = express();
 
-// ─── Security Middleware ────────────────────────────────────────────────────
-app.use(helmet());                         // Sets secure HTTP headers
-app.use(mongoSanitize());                  // Prevents NoSQL injection (strips $ and . from inputs)
+// Security middleware for safer API requests.
+app.use(helmet());
+app.use(mongoSanitize());
 
-// ─── Performance ───────────────────────────────────────────────────────────
-app.use(compression());                    // Gzip all responses
+// Compresses API responses to improve performance.
+app.use(compression());
 
-// ─── Request Parsing ───────────────────────────────────────────────────────
+// Parses incoming JSON and form data.
 app.use(express.json({ limit: "5mb" }));
 app.use(express.urlencoded({ extended: true, limit: "5mb" }));
 
-// ─── CORS ──────────────────────────────────────────────────────────────────
+// Allowed frontend origins for browser-based API requests.
 const allowedOrigins = [
   process.env.FRONTEND_URL || "http://localhost:5173",
   process.env.CLIENT_URL  || "http://localhost:5173",
 ];
 
+// Configures CORS access for the frontend and authenticated requests.
 app.use(
   cors({
     origin: (origin, cb) => {
-      // Allow requests with no origin (curl, mobile apps, etc.)
       if (!origin || allowedOrigins.includes(origin)) return cb(null, true);
       cb(new Error(`CORS policy: origin ${origin} is not allowed`));
     },
@@ -55,33 +61,35 @@ app.use(
   })
 );
 
-// ─── Request Logging ───────────────────────────────────────────────────────
+// Logs API requests outside the test environment.
 if (process.env.NODE_ENV !== "test") {
   app.use(morgan(process.env.NODE_ENV === "production" ? "combined" : "dev"));
 }
 
-// ─── Global Rate Limiter ───────────────────────────────────────────────────
+// Applies a global rate limit to all API routes.
 const globalLimiter = rateLimit({
-  windowMs: 15 * 60 * 1000, // 15 minutes
+  windowMs: 15 * 60 * 1000,
   max: 200,
   standardHeaders: true,
   legacyHeaders: false,
   message: { success: false, message: "Too many requests, please try again later." },
 });
+
 app.use("/api", globalLimiter);
 
-// Stricter limiter for auth endpoints
+// Applies a stricter rate limit to authentication routes.
 const authLimiter = rateLimit({
   windowMs: 15 * 60 * 1000,
   max: 20,
   message: { success: false, message: "Too many login attempts, please try again in 15 minutes." },
 });
 
-// ─── Health / Root ─────────────────────────────────────────────────────────
+// Root endpoint for confirming the API is running.
 app.get("/", (req, res) => {
   res.json({ message: "ArgoFarm API is running 🌾", version: "1.0.0" });
 });
 
+// Health check endpoint for monitoring server status.
 app.get("/api/health", (req, res) => {
   res.json({
     status: "ok",
@@ -91,18 +99,34 @@ app.get("/api/health", (req, res) => {
   });
 });
 
-// ─── Routes ────────────────────────────────────────────────────────────────
+// Authentication routes for registration, login, logout, profile access, and password updates.
 app.use("/api/auth",       authLimiter, authRoutes);
+
+// User routes for profile management, saved addresses, and account deletion.
 app.use("/api/users",      userRoutes);
+
+// Product routes for public product browsing and admin/farmer product management.
 app.use("/api/products",   productRoutes);
+
+// Category routes for viewing and managing product categories.
 app.use("/api/categories", categoryRoutes);
+
+// Cart routes for managing cart items and applying or removing coupons.
 app.use("/api/cart",       cartRoutes);
+
+// Order routes for checkout, order history, tracking, reordering, and payment updates.
 app.use("/api/orders",     orderRoutes);
+
+// Review routes for product reviews, review submission, moderation, and deletion.
 app.use("/api/reviews",    reviewRoutes);
+
+// Admin routes for dashboard stats, user management, order management, and reports.
 app.use("/api/admin",      adminRoutes);
+
+// Coupon routes for validating coupons and admin coupon management.
 app.use("/api/coupons",    couponRoutes);
 
-// ─── Error Handling ────────────────────────────────────────────────────────
+// Handles unknown routes and forwards errors to the global error handler.
 app.use(notFound);
 app.use(errorHandler);
 
@@ -113,9 +137,10 @@ const server = app.listen(PORT, () => {
   console.log(`   Environment: ${process.env.NODE_ENV || "development"}\n`);
 });
 
-// Graceful shutdown
+// Gracefully closes the HTTP server when the process receives a shutdown signal.
 const shutdown = (signal) => {
   console.log(`\n${signal} received. Shutting down gracefully...`);
+
   server.close(() => {
     console.log("HTTP server closed.");
     process.exit(0);
@@ -125,7 +150,7 @@ const shutdown = (signal) => {
 process.on("SIGTERM", () => shutdown("SIGTERM"));
 process.on("SIGINT",  () => shutdown("SIGINT"));
 
-// Catch unhandled promise rejections
+// Closes the server if an unhandled promise rejection occurs.
 process.on("unhandledRejection", (err) => {
   console.error("UNHANDLED REJECTION:", err.message);
   server.close(() => process.exit(1));

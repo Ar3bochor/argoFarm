@@ -1,11 +1,13 @@
+// Path: backend/middleware/authMiddleware.js
+// Description: Handles JWT authentication, role-based 
+// access control, and optional authentication for public 
+// routes.
+
 import jwt from "jsonwebtoken";
 import asyncHandler from "express-async-handler";
 import User from "../models/User.js";
 
-/**
- * PROTECT — verifies JWT and attaches req.user
- * Supports Bearer token in Authorization header.
- */
+// Verifies the JWT token and attaches the authenticated user to req.user.
 export const protect = asyncHandler(async (req, res, next) => {
   const authHeader = req.headers.authorization;
 
@@ -17,13 +19,16 @@ export const protect = asyncHandler(async (req, res, next) => {
   const token = authHeader.split(" ")[1];
 
   let decoded;
+
   try {
     decoded = jwt.verify(token, process.env.JWT_SECRET);
   } catch (err) {
     res.status(401);
+
     if (err.name === "TokenExpiredError") {
       throw new Error("Session expired — please log in again");
     }
+
     throw new Error("Not authorized — invalid token");
   }
 
@@ -36,12 +41,9 @@ export const protect = asyncHandler(async (req, res, next) => {
 
   req.user = user;
   next();
-});
+}),
 
-/**
- * AUTHORIZE ROLES — must be used after protect()
- * Usage: authorizeRoles("admin") or authorizeRoles("admin", "farmer")
- */
+// Restricts access to users whose role matches one of the allowed roles.
 export const authorizeRoles = (...roles) => {
   return (req, res, next) => {
     if (!req.user) {
@@ -60,21 +62,21 @@ export const authorizeRoles = (...roles) => {
   };
 };
 
-/**
- * OPTIONAL AUTH — attaches req.user if a valid token is present, but does NOT block
- * Useful for public endpoints that behave differently for logged-in users.
- */
+// Attaches req.user when a valid token exists, but allows the request to continue without authentication.
 export const optionalAuth = async (req, res, next) => {
   try {
     const authHeader = req.headers.authorization;
+
     if (!authHeader?.startsWith("Bearer ")) return next();
 
     const token = authHeader.split(" ")[1];
     const decoded = jwt.verify(token, process.env.JWT_SECRET);
     const user = await User.findById(decoded.id).select("-password").lean();
+
     if (user) req.user = user;
   } catch {
-    // Silently ignore invalid/expired tokens for optional auth
+    // Invalid or expired tokens are ignored because authentication is optional here.
   }
+
   next();
 };

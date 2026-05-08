@@ -1,3 +1,8 @@
+// Path: backend/controllers/reviewController.js
+// Description: Handles product reviews, including public 
+// review listing, review submission, moderation, deletion, 
+// and admin review management.
+
 import asyncHandler from "express-async-handler";
 import Review from "../models/Review.js";
 import Order from "../models/Order.js";
@@ -26,7 +31,7 @@ export const getProductReviews = asyncHandler(async (req, res) => {
     Review.countDocuments(filter),
   ]);
 
-  // Rating distribution (1–5)
+  // Counts approved reviews by rating value.
   const distribution = await Review.aggregate([
     { $match: filter },
     { $group: { _id: "$rating", count: { $sum: 1 } } },
@@ -44,7 +49,7 @@ export const getProductReviews = asyncHandler(async (req, res) => {
 });
 
 /**
- * @desc    Submit a review (only for delivered order items)
+ * @desc    Submit a review
  * @route   POST /api/reviews
  * @access  Private
  */
@@ -62,12 +67,13 @@ export const createReview = asyncHandler(async (req, res) => {
   }
 
   const product = await Product.findById(productId);
+
   if (!product || !product.isActive) {
     res.status(404);
     throw new Error("Product not found");
   }
 
-  // Must have a delivered order containing this product
+  // Allows reviews only for products from delivered orders.
   const order = await Order.findOne({
     user:               req.user._id,
     "orderItems.product": productId,
@@ -79,8 +85,9 @@ export const createReview = asyncHandler(async (req, res) => {
     throw new Error("You can only review products from delivered orders");
   }
 
-  // Check for duplicate (one review per user per product)
+  // Prevents the same user from reviewing the same product more than once.
   const existingReview = await Review.findOne({ user: req.user._id, product: productId });
+
   if (existingReview) {
     res.status(409);
     throw new Error("You have already reviewed this product");
@@ -119,7 +126,10 @@ export const approveReview = asyncHandler(async (req, res) => {
   review.status      = "approved";
   review.moderatedBy = req.user._id;
   review.moderatedAt = new Date();
+
   await review.save();
+
+  // Recalculates the product rating after moderation changes.
   await updateProductRating(review.product);
 
   res.json({ success: true, data: review });
@@ -141,7 +151,10 @@ export const rejectReview = asyncHandler(async (req, res) => {
   review.status      = "rejected";
   review.moderatedBy = req.user._id;
   review.moderatedAt = new Date();
+
   await review.save();
+
+  // Recalculates the product rating after moderation changes.
   await updateProductRating(review.product);
 
   res.json({ success: true, data: review });
@@ -160,21 +173,26 @@ export const deleteReview = asyncHandler(async (req, res) => {
     throw new Error("Review not found");
   }
 
+  // Only the review owner or an admin can delete the review.
   const isOwner = review.user.toString() === req.user._id.toString();
+
   if (req.user.role !== "admin" && !isOwner) {
     res.status(403);
     throw new Error("Not authorized to delete this review");
   }
 
   const productId = review.product;
+
   await review.deleteOne();
+
+  // Recalculates product rating after the review is removed.
   await updateProductRating(productId);
 
   res.json({ success: true, message: "Review deleted successfully" });
 });
 
 /**
- * @desc    Get all reviews (admin: filter by status)
+ * @desc    Get all reviews
  * @route   GET /api/reviews
  * @access  Admin
  */
@@ -184,6 +202,8 @@ export const getAllReviews = asyncHandler(async (req, res) => {
   const skip  = (page - 1) * limit;
 
   const filter = {};
+
+  // Allows admins to filter reviews by moderation status.
   if (req.query.status) filter.status = req.query.status;
 
   const [reviews, total] = await Promise.all([

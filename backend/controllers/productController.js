@@ -1,21 +1,21 @@
+// Path: backend/controllers/productController.js
+// Description: Handles product browsing, filtering, 
+// product details, featured products, related products, 
+// and admin/farmer product management.
+
 import asyncHandler from "express-async-handler";
 import Product from "../models/Product.js";
 import Category from "../models/Category.js";
 import { buildProductFilters, getPagination, getProductSort } from "../utils/apiFeatures.js";
 
-/**
- * Resolve a category by ObjectId, slug, or name.
- * Returns the ObjectId or null if not found.
- */
+// Resolves a category from an ObjectId, slug, or category name.
 const resolveCategory = async (category) => {
   if (!category) return null;
 
-  // ObjectId
   if (/^[0-9a-fA-F]{24}$/.test(category)) {
     return (await Category.exists({ _id: category })) ? category : null;
   }
 
-  // Slug or name
   const found = await Category.findOne({
     $or: [
       { slug: category.toLowerCase() },
@@ -52,7 +52,7 @@ export const getProducts = asyncHandler(async (req, res) => {
     filters.farmer = req.query.farmer;
   }
 
-  // Category filter
+  // Applies category filtering after resolving the provided category value.
   if (req.query.category) {
     const categoryId = await resolveCategory(req.query.category);
     if (!categoryId) {
@@ -61,9 +61,6 @@ export const getProducts = asyncHandler(async (req, res) => {
     filters.category = categoryId;
   }
 
-  // Keep regex-based search so partial product searches such as "tom" still
-  // match "tomato". Mongo text search is useful, but it does not behave like
-  // ecommerce autocomplete for partial words.
   const sort = getProductSort(req.query.sort);
 
   const [products, total] = await Promise.all([
@@ -103,17 +100,19 @@ export const getFeaturedProducts = asyncHandler(async (req, res) => {
 });
 
 /**
- * @desc    Get related products (same category, exclude current)
+ * @desc    Get related products
  * @route   GET /api/products/:id/related
  * @access  Public
  */
 export const getRelatedProducts = asyncHandler(async (req, res) => {
   const product = await Product.findById(req.params.id).select("category").lean();
+
   if (!product) {
     res.status(404);
     throw new Error("Product not found");
   }
 
+  // Finds active products from the same category, excluding the current product.
   const related = await Product.find({
     _id: { $ne: product._id },
     category: product.category,
@@ -135,8 +134,9 @@ export const getRelatedProducts = asyncHandler(async (req, res) => {
 export const getProductById = asyncHandler(async (req, res) => {
   const { id } = req.params;
 
-  // Try ObjectId first, then slug
   let product;
+
+  // Supports fetching products by MongoDB ObjectId or URL-friendly slug.
   if (/^[0-9a-fA-F]{24}$/.test(id)) {
     product = await Product.findById(id)
       .populate("category", "name slug")
@@ -154,7 +154,7 @@ export const getProductById = asyncHandler(async (req, res) => {
     throw new Error("Product not found");
   }
 
-  // Increment views asynchronously (fire-and-forget, non-blocking)
+  // Increments product views without delaying the response.
   Product.findByIdAndUpdate(product._id, { $inc: { views: 1 } }).exec();
 
   res.json({ success: true, data: product });
@@ -184,11 +184,13 @@ export const createProduct = asyncHandler(async (req, res) => {
   }
 
   const categoryExists = await Category.exists({ _id: category });
+
   if (!categoryExists) {
     res.status(400);
     throw new Error("Category not found");
   }
 
+  // Assigns the authenticated farmer as product owner when a farmer creates the product.
   const product = await Product.create({
     ...req.body,
     farmer: req.body.farmer || (req.user.role === "farmer" ? req.user._id : undefined),
@@ -200,7 +202,7 @@ export const createProduct = asyncHandler(async (req, res) => {
 /**
  * @desc    Update a product
  * @route   PUT /api/products/:id
- * @access  Admin / Farmer (own products)
+ * @access  Admin / Farmer
  */
 export const updateProduct = asyncHandler(async (req, res) => {
   const product = await Product.findById(req.params.id);
@@ -210,19 +212,20 @@ export const updateProduct = asyncHandler(async (req, res) => {
     throw new Error("Product not found");
   }
 
-  // Farmers can only update their own products
+  // Farmers can only update products that belong to them.
   if (req.user.role === "farmer" && product.farmer?.toString() !== req.user._id.toString()) {
     res.status(403);
     throw new Error("Not authorized to update this product");
   }
 
-  // Prevent overwriting protected fields
+  // Prevents users from manually changing calculated product statistics.
   delete req.body.sold;
   delete req.body.views;
   delete req.body.averageRating;
   delete req.body.numReviews;
 
   Object.assign(product, req.body);
+
   const updated = await product.save();
 
   res.json({ success: true, data: updated });
@@ -242,45 +245,56 @@ export const deleteProduct = asyncHandler(async (req, res) => {
   }
 
   await product.deleteOne();
+
   res.json({ success: true, message: "Product deleted successfully" });
 });
 
 /**
- * @desc    Soft-delete (deactivate) a product
+ * @desc    Deactivate a product
  * @route   PATCH /api/products/:id/deactivate
  * @access  Admin
  */
 export const deactivateProduct = asyncHandler(async (req, res) => {
   const product = await Product.findById(req.params.id);
+
   if (!product) {
     res.status(404);
     throw new Error("Product not found");
   }
+
   if (req.user.role === "farmer" && product.farmer?.toString() !== req.user._id.toString()) {
     res.status(403);
     throw new Error("Not authorized to update this product");
   }
+
   product.isActive = false;
+
   const updated = await product.save();
+
   res.json({ success: true, data: updated });
 });
 
 /**
- * @desc    Reactivate a deactivated product
+ * @desc    Reactivate a product
  * @route   PATCH /api/products/:id/activate
  * @access  Admin
  */
 export const activateProduct = asyncHandler(async (req, res) => {
   const product = await Product.findById(req.params.id);
+
   if (!product) {
     res.status(404);
     throw new Error("Product not found");
   }
+
   if (req.user.role === "farmer" && product.farmer?.toString() !== req.user._id.toString()) {
     res.status(403);
     throw new Error("Not authorized to update this product");
   }
+
   product.isActive = true;
+
   const updated = await product.save();
+
   res.json({ success: true, data: updated });
 });
