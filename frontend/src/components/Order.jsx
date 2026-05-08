@@ -1,35 +1,51 @@
-// Order.jsx
-    import React, { useState, useEffect } from 'react';
-    import axios from 'axios';
+/**
+ * File: src/components/Order.jsx
+ * Description: Fetches and displays the list of orders 
+ * associated with the logged-in farmer.
+ */
 
-    const Order = ({ user }) => {
-        const [orders, setOrders] = useState([]);
+import React, { useState, useEffect } from 'react';
+import axios from 'axios';
 
-        useEffect(() => {
-            const fetchOrders = async () => {
-                try {
-                    const response = await axios.get(`/api/orders/farmer?userId=${user._id}`);
-                    setOrders(response.data.orders);
-                } catch (error) {
-                    console.error('Error fetching orders', error);
-                }
-            };
-            fetchOrders();
-        }, [user]);
+const Order = ({ user }) => {
+    /**
+     * Stores the list of orders fetched from the backend.
+     */
+    const [orders, setOrders] = useState([]);
 
-        return (
-            <div className="orders">
-                <h2>Your Orders</h2>
-                {orders.length > 0 ? (
-                    orders.map(order => (
-                        <div key={order._id}>{order.productName}</div>
-                    ))
-                ) : (
-                    <p>No orders found.</p>
-                )}
-            </div>
-        );
-    };
+    /**
+     * Fetches all orders related to the current farmer whenever the user data changes.
+     */
+    useEffect(() => {
+        const fetchOrders = async () => {
+            try {
+                // Request orders linked to the current user's farmer account
+                const response = await axios.get(`/api/orders/farmer?userId=${user._id}`);
 
-    export default Order;
-    
+                // Save fetched orders in component state
+                setOrders(response.data.orders);
+            } catch (error) {
+                console.error('Error fetching orders', error);
+            }
+        };
+
+        fetchOrders();
+    }, [user]);
+
+    return (
+        <div className="orders">
+            <h2>Your Orders</h2>
+
+            {/* Show order list if orders are available, otherwise show an empty message */}
+            {orders.length > 0 ? (
+                orders.map(order => (
+                    <div key={order._id}>{order.productName}</div>
+                ))
+            ) : (
+                <p>No orders found.</p>
+            )}
+        </div>
+    );
+};
+
+export default Order;

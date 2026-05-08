@@ -1,7 +1,6 @@
 // Path: backend/middleware/authMiddleware.js
-// Description: Handles JWT authentication, role-based 
-// access control, and optional authentication for public 
-// routes.
+// Description: Handles JWT authentication, role-based authorization, and 
+// optional authentication for public routes.
 
 import jwt from "jsonwebtoken";
 import asyncHandler from "express-async-handler";
@@ -41,7 +40,7 @@ export const protect = asyncHandler(async (req, res, next) => {
 
   req.user = user;
   next();
-}),
+});
 
 // Restricts access to users whose role matches one of the allowed roles.
 export const authorizeRoles = (...roles) => {
@@ -62,7 +61,7 @@ export const authorizeRoles = (...roles) => {
   };
 };
 
-// Attaches req.user when a valid token exists, but allows the request to continue without authentication.
+// Attaches req.user when a valid token exists, but allows public access when no valid token is provided.
 export const optionalAuth = async (req, res, next) => {
   try {
     const authHeader = req.headers.authorization;
@@ -71,6 +70,7 @@ export const optionalAuth = async (req, res, next) => {
 
     const token = authHeader.split(" ")[1];
     const decoded = jwt.verify(token, process.env.JWT_SECRET);
+
     const user = await User.findById(decoded.id).select("-password").lean();
 
     if (user) req.user = user;

@@ -2,6 +2,7 @@ const STAR_FULL  = "★";
 const STAR_EMPTY = "☆";
 
 /**
+ * File: src/components/RatingStars.jsx
  * RatingStars — displays a 1-5 star rating with optional review count.
  *
  * Props:
