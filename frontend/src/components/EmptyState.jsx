@@ -1,6 +1,8 @@
 /**
  * File: src/components/EmptyState.jsx
- * Description: Reusable empty state component used to display a message and optional action when no data is available.
+ * Description: Reusable empty state component used to 
+ * display a message and optional action when no data is 
+ * available.
  */
 
 import { Link } from "react-router-dom";

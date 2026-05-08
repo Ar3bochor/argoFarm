@@ -1,5 +1,6 @@
 // Path: backend/middleware/errorMiddleware.js
-// Description: Provides centralized 404 handling and global error formatting for API responses.
+// Description: Provides centralized 404 handling and 
+// global error formatting for API responses.
 
 // Handles requests that do not match any registered route.
 export const notFound = (req, res, next) => {
